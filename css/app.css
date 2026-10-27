@@ -319,3 +319,23 @@ details.more[open] { display: flex; flex-direction: column; gap: 12px; }
 .toast { position: fixed; z-index: 60; left: 50%; transform: translateX(-50%); bottom: calc(96px + env(safe-area-inset-bottom, 0px)); max-width: calc(100% - 32px); padding: 12px 16px; border-radius: 12px; background: var(--raise); border: 1px solid var(--line-2); font-size: 0.9rem; box-shadow: 0 10px 30px rgb(0 0 0 / 0.5); }
 @media (min-width: 960px) { .toast { bottom: 32px; } }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+/* Jejum: título claro do cartão */
+.fast-title { width: 100%; display: flex; align-items: center; gap: 12px; }
+.fast-title .ico { width: 36px; height: 36px; border-radius: 10px; }
+.fast-title span { display: flex; flex-direction: column; gap: 1px; }
+.fast-title small { color: var(--muted); }
+
+/* Favoritos */
+.chip.fav.on { border-color: rgb(242 179 61 / 0.5); color: var(--amber); }
+.star-on { color: var(--amber); font-size: 0.8rem; margin-left: 2px; }
+.icon-btn.star { color: var(--muted); }
+.icon-btn.star.on { color: var(--amber); border-color: rgb(242 179 61 / 0.4); }
+.icon-btn.star.on svg { fill: currentColor; }
+.t-fav { color: var(--amber); }
+.auto-card { display: flex; align-items: center; gap: 14px; width: 100%; padding: 14px; text-align: left; border-radius: var(--r);
+  background: linear-gradient(135deg, rgb(239 59 59 / 0.16), rgb(255 138 61 / 0.06)); border: 1px solid rgb(239 59 59 / 0.35); }
+.auto-card > svg { color: var(--muted); }
+.fav-strip { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+.fav-strip .ph { width: 40px; height: 40px; background: var(--raise); }
+.btn[disabled] { opacity: 0.4; pointer-events: none; }

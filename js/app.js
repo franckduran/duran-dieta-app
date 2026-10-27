@@ -65,6 +65,7 @@
     check: '<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
     lixo: '<svg viewBox="0 0 24 24"><path d="M4.5 7h15M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13"/></svg>',
     fechar: '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+    estrela: '<svg viewBox="0 0 24 24"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/></svg>',
     ajuste: '<svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>',
   };
 
@@ -149,12 +150,15 @@
   const KEY = 'minha-dieta.v2';
   let S;
   function estadoInicial() {
-    const s = { v: 2, metas: { kcal: 2400, proteina_g: 170, gordura_g: 150, carboidrato_g: 120, fibra_g: 30 }, dias: {}, jejuns: [], dietas: [], custom: [], exemplo: true };
+    const s = { v: 2, metas: { kcal: 2400, proteina_g: 170, gordura_g: 150, carboidrato_g: 120, fibra_g: 30 }, dias: {}, jejuns: [], dietas: [], custom: [], favs: [], exemplo: true };
     aplicarDieta(RECS[3], inicioSemana(new Date()), true, s);
     return s;
   }
   try { S = JSON.parse(localStorage.getItem(KEY)); } catch (e) { S = null; }
-  if (!S || S.v !== 2) S = estadoInicial();
+  let novoEstado = false;
+  if (!S || S.v !== 2) { S = estadoInicial(); novoEstado = true; }
+  S.favs = S.favs || [];
+  const ehFav = id => S.favs.includes(id);
   const salvar = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* armazenamento indisponível */ } };
 
   const alimentos = () => [...DB.alimentos, ...S.custom];
@@ -273,11 +277,13 @@
     const estado = j.fim ? 'feito' : j.inicio > now ? 'futuro' : 'ativo';
     const decorrido = estado === 'ativo' ? (now - j.inicio) / H : estado === 'feito' ? (j.fim - j.inicio) / H : 0;
     const p = Math.min(1, decorrido / total), R = 52, C = 2 * Math.PI * R;
+    const titulo = { futuro: 'Próximo jejum', ativo: 'Jejum em andamento', feito: 'Jejum concluído' }[estado];
     return `<section class="fast ${estado}" data-jejum="${j.id}">
+      <div class="fast-title">${icone('jejum', 't-fast')}<span><b>${titulo}</b><small>${fmt(total, 0)} h${total >= 24 ? ` (${fmt(total / 24, 1)} ${total >= 48 ? 'dias' : 'dia'})` : ''} sem comer</small></span></div>
       <div class="fast-ring">
         <svg viewBox="0 0 120 120" aria-hidden="true"><defs><linearGradient id="gr" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="var(--red)"/><stop offset="1" stop-color="var(--orange)"/></linearGradient></defs>
           <circle cx="60" cy="60" r="${R}" class="ring-bg"/><circle cx="60" cy="60" r="${R}" class="ring-fg" stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - p)}" id="ringFg" data-c="${C}"/></svg>
-        <div class="ring-c">${estado === 'futuro' ? `<small>começa em</small><b id="jTempo">${duracao((j.inicio - now) / H)}</b>` : estado === 'feito' ? `<small>jejum de</small><b>${duracao(decorrido)}</b>` : `<small>em jejum há</small><b id="jTempo">${duracao(decorrido)}</b>`}</div>
+        <div class="ring-c">${estado === 'futuro' ? `<small>o jejum começa em</small><b id="jTempo">${duracao((j.inicio - now) / H)}</b>` : estado === 'feito' ? `<small>você jejuou</small><b>${duracao(decorrido)}</b>` : `<small>em jejum há</small><b id="jTempo">${duracao(decorrido)}</b>`}</div>
       </div>
       <div class="fast-info">
         <div><small>Começo</small><b>${quando(j.inicio)}</b></div>
@@ -330,14 +336,15 @@
   }
 
   // ----- Alimentos -----
-  const filtro = { q: '', cat: '', ord: 'proteina_g', base: 'g' };
+  const filtro = { q: '', cat: S.favs.length ? 'fav' : '', ord: 'proteina_g', base: 'g' };
+  const chipsCat = act => [['fav', '★ Favoritos'], ['', 'Todos'], ...Object.entries(CATS)].map(([k, n]) => `<button class="chip ${filtro.cat === k ? 'on' : ''} ${k === 'fav' ? 'fav' : ''}" data-act="${act}" data-c="${k}">${n.split(',')[0]}</button>`).join('');
   function vAlimentos() {
     return `
     <header class="head"><div class="head-t"><p class="eyebrow">${alimentos().length} alimentos · por 100 g</p><h1>Alimentos</h1></div></header>
     <input type="search" id="busca" class="search" placeholder="Buscar alimento" value="${esc(filtro.q)}" data-act="busca" aria-label="Buscar alimento">
     <div class="chips">
       <button class="chip sel" data-act="escolherOrdem">Mais ${esc(NUT[filtro.ord].n.toLowerCase())}${filtro.base === 'kcal' ? ' por kcal' : ''} ▾</button>
-      ${[['', 'Todos'], ...Object.entries(CATS)].map(([k, n]) => `<button class="chip ${filtro.cat === k ? 'on' : ''}" data-act="cat" data-c="${k}">${n.split(',')[0]}</button>`).join('')}
+      ${chipsCat('cat')}
     </div>
     <div id="lista">${listaAlimentos()}</div>
     <button class="btn ghost" data-act="novoAlimento">Cadastrar alimento</button>`;
@@ -345,11 +352,11 @@
   const semAcento = s => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
   function listaAlimentos(picker = false) {
     const q = semAcento((picker ? filtro.qP : filtro.q) || '').trim(), k = filtro.ord;
-    const L = alimentos().filter(f => (!filtro.cat || f.categoria === filtro.cat) && (!q || semAcento(f.nome).includes(q)))
+    const L = alimentos().filter(f => (!filtro.cat || (filtro.cat === 'fav' ? ehFav(f.id) : f.categoria === filtro.cat)) && (!q || semAcento(f.nome).includes(q)))
       .map(f => ({ f, s: filtro.base === 'kcal' ? (f.kcal ? valor(f, k) / f.kcal * 100 : 0) : valor(f, k) })).sort((a, b) => b.s - a.s);
-    if (!L.length) return '<p class="empty">Nenhum alimento encontrado.</p>';
+    if (!L.length) return filtro.cat === 'fav' && !q ? '<p class="empty">Nenhum favorito ainda. Abra um alimento e toque na estrela para guardar os que você mais usa.</p>' : '<p class="empty">Nenhum alimento encontrado.</p>';
     return `<div class="rows foods">${L.map(({ f, s }) => `<button class="food" data-act="${picker ? 'escolher' : 'verAlimento'}" data-a="${esc(f.id)}">
-      ${foto(f)}<span class="row-t"><b>${esc(f.nome)}</b><small>${esc((CATS[f.categoria] || '').split(',')[0])} <i>|</i> ${fmt(f.kcal, 0)} kcal</small></span>
+      ${foto(f)}<span class="row-t"><b>${esc(f.nome)}${ehFav(f.id) ? ' <span class="star-on" aria-label="favorito">★</span>' : ''}</b><small>${esc((CATS[f.categoria] || '').split(',')[0])} <i>|</i> ${fmt(f.kcal, 0)} kcal</small></span>
       <span class="fv">${s > 0 ? `<b>${fmt(s)}</b><small>${NUT[k].u}</small>` : '<small>–</small>'}</span>${picker ? `<span class="add">${ICO.mais}</span>` : ''}</button>`).join('')}</div>`;
   }
 
@@ -368,6 +375,7 @@
     return `
     <header class="head"><div class="head-t"><p class="eyebrow">Semanas prontas</p><h1>Dietas</h1></div></header>
     <p class="muted">Escolha uma semana e aplique no calendário. Depois ajuste o que quiser em cada dia.</p>
+    <button class="auto-card" data-act="gerarAuto">${icone('estrela', 't-fav')}<span class="row-t"><b>Criar dieta com meus favoritos</b><small>${S.favs.length ? `${S.favs.length} ${S.favs.length === 1 ? 'favorito' : 'favoritos'} · monta a semana nas suas metas` : 'Marque alimentos com a estrela primeiro'}</small></span>${ICO.seta}</button>
     <section class="group"><h2 class="label">Recomendadas</h2><div class="stack">${RECS.map(d => cardDieta(d)).join('')}</div></section>
     <section class="group"><h2 class="label">Minhas</h2>
       ${S.dietas.length ? `<div class="stack">${S.dietas.map(d => cardDieta(d, true)).join('')}</div>` : '<p class="empty">Monte uma semana no calendário e salve aqui para repetir depois.</p>'}
@@ -460,7 +468,7 @@
   function sheetPicker() {
     sheet(`${topo('Escolher alimento', '', 'voltarRef')}
       <input type="search" id="buscaP" class="search" placeholder="Buscar" value="${esc(filtro.qP || '')}" data-act="buscaP" aria-label="Buscar">
-      <div class="chips">${[['', 'Todos'], ...Object.entries(CATS)].map(([k, n]) => `<button class="chip ${filtro.cat === k ? 'on' : ''}" data-act="catP" data-c="${k}">${n.split(',')[0]}</button>`).join('')}</div>
+      <div class="chips">${chipsCat('catP')}</div>
       <div id="listaP">${listaAlimentos(true)}</div>`, { ...ctx, tipo: 'picker' });
     setTimeout(() => $('#buscaP')?.focus({ preventScroll: true }), 60);
   }
@@ -509,7 +517,9 @@
   function sheetAlimento(a, g = 100) {
     const f = FOOD(a); if (!f) return;
     const t = soma([{ a, g }]);
-    sheet(`${topo(esc(f.nome), esc(CATS[f.categoria] || ''))}
+    sheet(`<div class="sheet-h"><div class="head-t"><h2>${esc(f.nome)}</h2><p class="muted small">${esc(CATS[f.categoria] || '')}</p></div>
+        <button class="icon-btn star ${ehFav(a) ? 'on' : ''}" data-act="fav" data-a="${esc(a)}" aria-pressed="${ehFav(a)}" aria-label="${ehFav(a) ? 'Tirar dos favoritos' : 'Adicionar aos favoritos'}">${ICO.estrela}</button>
+        <button class="icon-btn" data-act="fechar" aria-label="Fechar">${ICO.fechar}</button></div>
       <div class="hero-food">${foto(f, 'lg')}${f.beneficio ? `<p>${esc(f.beneficio)}</p>` : ''}</div>
       ${f.obs ? `<p class="note">${esc(f.obs)}</p>` : ''}
       <div class="slider"><div class="slider-h"><span>Quantidade</span><b id="vqLbl">${g} g</b></div>${range('qG', 10, f.kcal > 500 ? 200 : 500, f.un || 10, g, 'qtd', `data-a="${esc(a)}"`)}</div>
@@ -562,6 +572,94 @@
         <div class="grid2">${MACROS.map(m => `<label class="field">${m.n} (${m.u})<input name="${m.k}" type="number" step="0.1" min="0" value="0"></label>`).join('')}</div>
         <details class="more"><summary>Vitaminas e minerais</summary><div class="grid2">${MICROS.map(m => `<label class="field">${m.n} (${m.u})<input name="${m.k}" type="number" step="0.01" min="0"></label>`).join('')}</div></details>
         <button class="btn" type="submit">Salvar alimento</button></form>`);
+  }
+
+  // ---------- Dieta automática com os favoritos ----------
+  const GRUPO = f => {
+    if (['carnes', 'miudos', 'ovos'].includes(f.categoria) || (f.categoria === 'laticinios' && f.proteina_g >= 15)) return 'prot';
+    if (f.categoria === 'gorduras' || (f.categoria === 'laticinios' && f.gordura_g >= 30)) return 'gord';
+    if (f.categoria === 'tuberculos') return 'tub';
+    if (f.categoria === 'frutas') return 'fruta';
+    if (f.categoria === 'verduras' || f.categoria === 'legumes') return 'veg';
+    return f.proteina_g >= 15 ? 'prot' : f.gordura_g >= 40 ? 'gord' : f.carboidrato_g >= 10 ? 'tub' : 'veg';
+  };
+  const arred = (g, st = 10) => Math.max(st, Math.round(g / st) * st);
+  function sheetAuto() {
+    const favs = S.favs.map(FOOD).filter(Boolean);
+    const falta = !favs.some(f => GRUPO(f) === 'prot') ? 'Adicione pelo menos uma carne, ovo ou queijo aos favoritos. Abra o alimento em Alimentos e toque na estrela.' : '';
+    sheet(`${topo('Dieta com meus favoritos', `Metas de ${fmt(S.metas.kcal, 0)} kcal e ${fmt(S.metas.proteina_g, 0)} g de proteína por dia`)}
+      ${favs.length ? `<div class="fav-strip">${favs.map(f => foto(f)).join('')}</div>` : ''}
+      ${falta ? `<p class="note">${falta}</p>` : ''}
+      <div class="field">Objetivo<div class="seg" id="autoObj">${[['equilibrio', 'Equilibrada'], ['proteina', 'Mais proteína'], ['fibra', 'Mais fibra']].map(([v, n], k) => `<button class="${k === 0 ? 'on' : ''}" data-act="autoOp" data-v="${v}">${n}</button>`).join('')}</div></div>
+      <div class="field">Refeições por dia<div class="seg" id="autoRef">${[2, 3].map(v => `<button class="${v === 3 ? 'on' : ''}" data-act="autoOp" data-v="${v}">${v}</button>`).join('')}</div></div>
+      <label class="field">Jejum na semana<select id="autoJejum"><option value="0">Sem jejum longo</option>${[1, 2, 3, 4, 5].map(n => `<option value="${n}">${n} ${n > 1 ? 'dias' : 'dia'} sem comer, com pré-jejum gorduroso</option>`).join('')}</select></label>
+      <p class="muted small">O app distribui seus favoritos pelas refeições e ajusta as gramas para chegar perto das suas metas. Depois você aplica no calendário e muda o que quiser.</p>
+      <button class="btn" data-act="confirmarAuto" ${falta ? 'disabled' : ''}>Criar dieta</button>`);
+  }
+  function dietaAutomatica({ obj, ref: nRef, jejum: nJ }) {
+    const favs = S.favs.map(FOOD).filter(Boolean), G = { prot: [], gord: [], tub: [], fruta: [], veg: [] };
+    favs.forEach(f => G[GRUPO(f)].push(f));
+    if (!G.prot.length) return { erro: 'Adicione pelo menos uma carne, ovo ou queijo aos favoritos.' };
+    const ovosTodos = G.prot.filter(f => f.categoria === 'ovos'), ovos = ovosTodos.filter(f => f.id !== 'gema' && f.id !== 'clara').length ? ovosTodos.filter(f => f.id !== 'gema' && f.id !== 'clara') : ovosTodos, carnes = G.prot.filter(f => f.categoria !== 'ovos');
+    const miudos = carnes.filter(f => f.categoria === 'miudos'), normais = carnes.filter(f => f.categoria !== 'miudos');
+    const metaP = S.metas.proteina_g * (obj === 'proteina' ? 1.15 : 1), metaK = S.metas.kcal, metaC = S.metas.carboidrato_g;
+    const pega = (arr, i) => arr.length ? arr[((i % arr.length) + arr.length) % arr.length] : null;
+    const nomes = nRef === 3 ? [['Café da manhã', '08:00'], ['Almoço', '12:30'], ['Jantar', '19:30']] : [['Almoço', '12:30'], ['Jantar', '19:30']];
+    const addEm = itens => (f, g) => { if (f && g > 0) itens.push({ a: f.id, g: f.un ? Math.max(f.un, Math.round(g / f.un) * f.un) : arred(g, f.kcal > 500 ? 5 : 10) }); };
+
+    function refeicao(d, m) {
+      const [nome, hora] = nomes[m], itens = [], add = addEm(itens), cafe = nome === 'Café da manhã';
+      // proteína: ovos no café; miúdos (fígado) no máximo uma vez na semana, na quarta
+      let prot = cafe && ovos.length ? pega(ovos, d) : null;
+      if (!prot) {
+        const pool = miudos.length && d === diaMiudo && m === nomes.length - 2 ? miudos : (normais.length ? normais : carnes.length ? carnes : ovos);
+        prot = pega(pool, d * nRef + m);
+      }
+      const nVeg = obj === 'fibra' ? 2 : 1, vegs = [];
+      for (let k = 0; k < nVeg; k++) { const v = pega(G.veg, d * 3 + m * 2 + k); if (v && !vegs.includes(v)) vegs.push(v); }
+      const carb = cafe ? pega(G.fruta, d) : (pega(G.tub, d + m) || pega(G.fruta, d + m));
+      const fruta = obj === 'fibra' && !cafe && carb && carb.categoria !== 'frutas' ? pega(G.fruta, d + m + 1) : null;
+      const alvoP = metaP / nRef, alvoK = metaK / nRef, alvoC = metaC / nRef;
+      if (!cafe || obj === 'fibra') vegs.forEach(v => add(v, obj === 'fibra' ? 150 : 120));
+      if (fruta) add(fruta, 120);
+      const b1 = soma(itens);
+      if (carb) add(carb, Math.min(carb.gordura_g > 10 ? 150 : cafe ? 200 : 300, Math.max(cafe ? 100 : 80, (alvoC - b1.carboidrato_g) / (carb.carboidrato_g || 10) * 100)));
+      const b2 = soma(itens);
+      add(prot, Math.min(prot.categoria === 'miudos' ? 150 : prot.categoria === 'ovos' ? 250 : prot.categoria === 'laticinios' ? 150 : 400, Math.max(prot.categoria === 'ovos' ? 100 : 120, (alvoP - b2.proteina_g) / (prot.proteina_g || 10) * 100)));
+      const b3 = soma(itens), gord = pega(G.gord, d + m);
+      if (gord) add(gord, Math.min(30, Math.max(0, (alvoK - b3.kcal) / (gord.kcal || 700) * 100)));
+      return { id: uid(), nome, hora, feito: false, itens };
+    }
+    function preJejum(d) {
+      const itens = [], add = addEm(itens), gordas = [...G.prot].sort((a, b) => ((a.categoria === 'carnes' ? 0 : 1) - (b.categoria === 'carnes' ? 0 : 1)) || b.gordura_g - a.gordura_g);
+      add(gordas[0], nJ >= 3 ? 400 : 350);
+      const gema = favs.find(f => f.id === 'gema') || ovosTodos[0]; if (gema && gema !== gordas[0]) add(gema, gema.un ? gema.un * 3 : 100);
+      G.gord.slice(0, 2).forEach((f, k) => add(f, k === 0 ? 40 : 30));
+      add(pega(G.veg, d), 100);
+      return { id: uid(), nome: 'Pré-jejum', hora: '19:00', feito: false, itens };
+    }
+    // pré-jejum na terça (1 ou 2 dias) ou no domingo (3 dias ou mais), jejum nos dias seguintes, quebra no dia depois
+    const ini = nJ ? (nJ >= 3 ? 6 : 1) : -1;
+    const diasJejum = new Set(Array.from({ length: nJ }, (_, k) => (ini + 1 + k) % 7)), quebraDia = nJ ? (ini + nJ + 1) % 7 : -1;
+    const diaMiudo = [2, 3, 0, 4, 5, 6, 1].find(d => !diasJejum.has(d) && d !== ini && d !== quebraDia);
+    const dias = [];
+    for (let d = 0; d < 7; d++) {
+      let refs = [];
+      if (!diasJejum.has(d)) {
+        refs = nomes.map((_, m) => refeicao(d, m));
+        if (d === ini) refs = [...refs.filter(r => r.nome !== 'Jantar'), preJejum(d)];
+        if (d === quebraDia) {
+          refs = refs.filter(r => r.nome !== 'Café da manhã');
+          const q = refs.find(r => r.nome === 'Almoço');
+          if (q) { q.nome = 'Quebra do jejum'; q.hora = '12:00'; q.itens = q.itens.map(it => ({ ...it, g: arred(it.g * 0.6, FOOD(it.a)?.un || 10) })); }
+        }
+      }
+      const rot = [sol(diasJejum.has(d) ? 30 : 20)];
+      rot.push(!diasJejum.has(d) && d % 2 === 0 ? treino(45, 'Musculação') : treino(30, 'Caminhada', '07:00'));
+      dias.push({ refeicoes: refs, rotina: rot });
+    }
+    const nomeObj = { equilibrio: 'equilibrada', proteina: 'mais proteína', fibra: 'mais fibra' }[obj];
+    return { id: 'minha-' + uid(), nome: `Favoritos · ${nomeObj}`, desc: `${nRef} refeições por dia${nJ ? `, jejum de ${nJ} ${nJ > 1 ? 'dias' : 'dia'}` : ''}. Feita com ${favs.length} favoritos.`, dias, jejum: nJ ? [{ dia: ini, hora: '20:00', horas: 24 * nJ + 16 }] : [] };
   }
 
   // ---------- Ações ----------
@@ -628,6 +726,15 @@
     addAoDia: el => { const iso = $('#addData').value || hoje(), g = +$('#qG').value; const d = diaEdit(iso); let r = d.refeicoes.find(x => x.nome === 'Avulsos'); if (!r) { r = { id: uid(), nome: 'Avulsos', hora: '', feito: false, itens: [] }; d.refeicoes.push(r); } r.itens.push({ a: el.dataset.a, g }); salvar(); fechar(); render(); toast(`Adicionado em ${tituloData(iso)}`); },
     modeloAoDia: el => { const iso = $('#addData').value || hoje(); diaEdit(iso).refeicoes.push(ref(el.dataset.k)); salvar(); fechar(); render(); toast(`Adicionado em ${tituloData(iso)}`); },
     novoAlimento: () => sheetNovoAlimento(),
+    fav: el => { const a = el.dataset.a; S.favs = ehFav(a) ? S.favs.filter(x => x !== a) : [...S.favs, a]; salvar(); const on = ehFav(a);
+      el.classList.toggle('on', on); el.setAttribute('aria-pressed', on); el.setAttribute('aria-label', on ? 'Tirar dos favoritos' : 'Adicionar aos favoritos'); render(); toast(on ? 'Adicionado aos favoritos' : 'Removido dos favoritos'); },
+    gerarAuto: () => sheetAuto(),
+    confirmarAuto: () => {
+      const op = { obj: $('#autoObj .on')?.dataset.v || 'equilibrio', ref: +($('#autoRef .on')?.dataset.v || 3), jejum: +$('#autoJejum').value };
+      const r = dietaAutomatica(op); if (r.erro) return toast(r.erro);
+      S.dietas.push(r); salvar(); render(); sheetDieta(r.id); toast('Dieta criada com seus favoritos');
+    },
+    autoOp: el => { $$(`#${el.parentElement.id} button`).forEach(b => b.classList.toggle('on', b === el)); },
     verDieta: el => sheetDieta(el.dataset.id),
     verModelo: el => sheetModelo(el.dataset.k),
     aplicar: el => { const dt = RECS.find(d => d.id === el.dataset.id) || S.dietas.find(d => d.id === el.dataset.id); const seg = dataDe($('#semAplicar').value); aplicarDieta(dt, seg, $('#substituir').checked); S.exemplo = false; salvar(); fechar(); mesCal = new Date(seg.getFullYear(), seg.getMonth(), 1); location.hash = 'calendario'; render(); toast(`“${dt.nome}” aplicada`); },
@@ -645,7 +752,7 @@
     copiarBk: () => { const t = $('#bkTxt'); navigator.clipboard?.writeText(t.value).then(() => toast('Copiado'), () => { t.select(); toast('Selecione e copie'); }); },
     colarBk: () => importar($('#bkTxt').value),
     delCustom: el => { S.custom = S.custom.filter(f => f.id !== el.dataset.id); salvar(); render(); },
-    resetar: () => confirmar('Apagar todos os dados deste aparelho?', () => { S = { v: 2, metas: S.metas, dias: {}, jejuns: [], dietas: [], custom: [], exemplo: false }; salvar(); render(); toast('Dados apagados'); }, 'Apagar tudo'),
+    resetar: () => confirmar('Apagar todos os dados deste aparelho?', () => { S = { v: 2, metas: S.metas, dias: {}, jejuns: [], dietas: [], custom: [], favs: S.favs || [], exemplo: false }; salvar(); render(); toast('Dados apagados'); }, 'Apagar tudo'),
   };
   function importar(txt) {
     try { const o = JSON.parse(txt); if (o.v !== 2 || typeof o.dias !== 'object') throw 0; S = o; salvar(); fechar(); render(); toast('Backup importado'); }
@@ -687,5 +794,6 @@
   });
   window.addEventListener('hashchange', () => { fechar(); render(); window.scrollTo(0, 0); });
   document.addEventListener('visibilitychange', () => { if (!document.hidden) render(); });
+  if (novoEstado) salvar();
   render();
 })();

@@ -6,8 +6,8 @@ App PWA para montar e acompanhar uma dieta natural (carne vermelha, ovos, tubér
 
 - **Hoje**: o jejum em destaque (começo, fim previsto, quanto falta), os números do dia e as refeições e a rotina para marcar.
 - **Calendário**: toque em qualquer dia, passado ou futuro, para ver e adicionar refeições, sol, treino e jejum. Os jejuns aparecem como uma faixa vermelha entre os dias.
-- **Alimentos**: 86 alimentos por 100 g com ícone, busca, categorias e ordenação por qualquer nutriente (por 100 g ou por 100 kcal).
-- **Dietas**: 5 semanas recomendadas e as suas, para aplicar no calendário, e refeições prontas (incluindo pré-jejum).
+- **Alimentos**: 86 alimentos por 100 g com ícone, busca, categorias, favoritos (estrela) e ordenação por qualquer nutriente (por 100 g ou por 100 kcal).
+- **Dietas**: dieta automática montada com os seus favoritos e as suas metas, 5 semanas recomendadas e as suas, para aplicar no calendário, e refeições prontas (incluindo pré-jejum).
 - **Resumo**: a semana com totais, gráfico por dia e vitaminas e minerais.
 - **Metas e dados**: metas diárias e backup (exportar/importar).
 
