@@ -4,11 +4,11 @@ App PWA para montar e acompanhar uma dieta natural (carne vermelha, ovos, tubér
 
 ## O que tem
 
-- **Hoje**: refeições e rotina do dia para marcar como feitas, cronômetro de jejum com meta e fase, totais comidos.
-- **Plano**: semana de segunda a domingo. Refeições com alimentos e gramas, tipo de dia (normal, janela de jejum, jejum de 24 h), sol e treino em minutos. Botão "Planejar jejum" coloca o pré-jejum, os dias sem comer (1 a 5) e a quebra leve.
-- **Alimentos**: 86 alimentos por 100 g, busca, categorias e ordenação por qualquer nutriente (por 100 g ou por 100 kcal). Dá para cadastrar alimentos próprios.
-- **Dietas**: dietas próprias e 5 recomendadas (base equilibrada, alta proteína, fibras, semana com jejum de 2 dias, semana com jejum de 4 dias), além de modelos de refeição.
-- **Métricas**: totais da semana e médias por dia, gráfico por nutriente, tabela, micronutrientes em % da referência. Mostra a semana planejada ou os últimos 7 dias marcados.
+- **Hoje**: o jejum em destaque (começo, fim previsto, quanto falta), os números do dia e as refeições e a rotina para marcar.
+- **Calendário**: toque em qualquer dia, passado ou futuro, para ver e adicionar refeições, sol, treino e jejum. Os jejuns aparecem como uma faixa vermelha entre os dias.
+- **Alimentos**: 86 alimentos por 100 g com ícone, busca, categorias e ordenação por qualquer nutriente (por 100 g ou por 100 kcal).
+- **Dietas**: 5 semanas recomendadas e as suas, para aplicar no calendário, e refeições prontas (incluindo pré-jejum).
+- **Resumo**: a semana com totais, gráfico por dia e vitaminas e minerais.
 - **Metas e dados**: metas diárias e backup (exportar/importar).
 
 ## Como rodar
@@ -26,6 +26,9 @@ e abra http://localhost:8000.
 Abra o endereço publicado no Safari, toque em Compartilhar e depois em "Adicionar à Tela de Início".
 
 ## Dados dos alimentos
+
+Ícones: [Fluent Emoji](https://github.com/microsoft/fluentui-emoji) da Microsoft, licença MIT.
+
 
 `dados/alimentos.json` é a base pesquisada (USDA FoodData Central e TACO). `js/data.js` é gerado a partir dela:
 

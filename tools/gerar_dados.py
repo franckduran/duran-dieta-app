@@ -39,6 +39,24 @@ extras = [
       micronutrientes=dict(vit_a_ug=840, vit_e_mg=2.8, vit_k_ug=8.6),
       beneficio='Gordura pura do leite, aguenta bem o calor.', fonte=U),
 ]
+
+# Ícone de cada alimento (Fluent Emoji 3D, Microsoft, licença MIT) em img/alimentos/
+ICONES = {
+ 'cut_of_meat': 'patinho alcatra contrafile fraldinha acem musculo picanha carne-moida-gorda figado rim',
+ 'meat_on_bone': 'costela', 'ewe': 'cordeiro', 'anatomical_heart': 'coracao', 'tongue': 'lingua', 'cow_face': 'bucho',
+ 'egg': 'ovo clara ovo-codorna ovo-pata', 'cooking': 'gema',
+ 'roasted_sweet_potato': 'batata-doce abobora', 'potato': 'batata inhame cara', 'ginger_root': 'mandioca mandioquinha',
+ 'onion': 'beterraba rabanete nabo cebola', 'carrot': 'cenoura',
+ 'leafy_green': 'couve espinafre rucula agriao alface acelga repolho couve-bruxelas', 'broccoli': 'brocolis couve-flor', 'herb': 'salsa',
+ 'cucumber': 'abobrinha pepino', 'eggplant': 'berinjela', 'pear': 'chuchu', 'pea_pod': 'quiabo', 'bell_pepper': 'pimentao', 'tomato': 'tomate',
+ 'seedling': 'aspargo chia', 'garlic': 'alho',
+ 'avocado': 'abacate', 'green_apple': 'goiaba', 'grapes': 'maracuja', 'kiwi_fruit': 'kiwi', 'melon': 'mamao', 'tangerine': 'laranja',
+ 'strawberry': 'morango', 'banana': 'banana', 'mango': 'manga', 'pineapple': 'abacaxi', 'red_apple': 'maca', 'blueberries': 'mirtilo', 'lemon': 'limao',
+ 'olive': 'azeite', 'butter': 'manteiga sebo ghee', 'jar': 'banha', 'bone': 'tutano', 'coconut': 'coco', 'chestnut': 'castanha-para nozes amendoas',
+ 'peanuts': 'castanha-caju', 'beans': 'linhaca',
+ 'cheese_wedge': 'mussarela parmesao cheddar queijo-minas ricota', 'glass_of_milk': 'nata leite', 'bowl_with_spoon': 'iogurte',
+}
+ICONE = {a: k for k, v in ICONES.items() for a in v.split()}
 unid = {'ovo': 50, 'gema': 17, 'clara': 33, 'ovo-codorna': 10, 'ovo-pata': 70, 'castanha-para': 5, 'nozes': 5,
         'banana': 100, 'laranja': 130, 'maca': 150, 'kiwi': 75, 'limao': 60, 'alho': 5, 'tomate': 120, 'cebola': 110}
 foods = []
@@ -46,6 +64,7 @@ for a in d['alimentos'] + extras:
     f = {k: a.get(k) for k in ('id','nome','categoria','kcal','proteina_g','gordura_g','carboidrato_g','fibra_g','beneficio','obs','fonte')}
     f['micro'] = {k: v for k, v in (a.get('micronutrientes') or {}).items() if v is not None}
     if a['id'] in unid: f['un'] = unid[a['id']]
+    if a['id'] in ICONE: f['img'] = 'img/alimentos/' + ICONE[a['id']] + '.webp'
     foods.append({k: v for k, v in f.items() if v not in (None, '')})
 js = ('// Gerado a partir de dieta/alimentos.json. Valores por 100 g.\n'
       'window.DB = ' + json.dumps({'refs': refs, 'categorias': cats, 'alimentos': foods, 'aviso': d['meta']['aviso']}, ensure_ascii=False, separators=(',', ':')) + ';\n')
