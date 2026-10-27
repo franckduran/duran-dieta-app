@@ -205,7 +205,18 @@
   }
 
   // ---------- Componentes ----------
-  const foto = (f, cls = '') => f?.img ? `<img class="ph ${cls}" src="${f.img}" alt="" loading="lazy" decoding="async">` : `<span class="ph ph-x ${cls}">${esc((f?.nome || '?')[0])}</span>`;
+  const foto = (f, cls = '') => f?.imgs?.length > 1 ? `<span class="ph ph-multi n${Math.min(3, f.imgs.length)} ${cls}">${f.imgs.slice(0, 3).map(i => `<img src="${i}" alt="" loading="lazy" decoding="async">`).join('')}</span>`
+    : f?.img ? `<img class="ph ${cls}" src="${f.img}" alt="" loading="lazy" decoding="async">` : `<span class="ph ph-x ${cls}">${esc((f?.nome || '?')[0])}</span>`;
+  // Barras do dia: comido (cheia) e planejado (clara), contra a meta
+  function barrasDia(iso, t, feito) {
+    return MACROS.map(m => { const meta = S.metas[m.k] || 0, c = feito[m.k], wc = Math.min(100, pct(c, meta)), wp = Math.min(100, pct(t[m.k], meta));
+      return `<span class="dm m-${m.k} ${c > meta * 1.1 && meta ? 'over' : ''}"><span class="dm-h"><span>${m.n}</span><b>${fmt(c, 0)}<small> / ${fmt(meta, 0)} ${m.u}</small></b></span><span class="dbar"><i class="pl" style="width:${wp}%"></i><i class="ok" data-k="${iso}-${m.k}" style="width:${wc}%"></i></span></span>`; }).join('');
+  }
+  const prevW = {};
+  function animarBarras() {
+    $$('.dbar i.ok').forEach(i => { const k = i.dataset.k, w = i.style.width, p = prevW[k] ?? '0%'; prevW[k] = w;
+      if (p === w) return; i.style.transition = 'none'; i.style.width = p; void i.offsetWidth; i.style.transition = ''; i.style.width = w; });
+  }
   const icone = (n, cls = '') => `<span class="ico ${cls}">${ICO[n]}</span>`;
   const range = (id, min, max, step, val, act, extra = '') => `<input type="range" id="${id}" min="${min}" max="${max}" step="${step}" value="${val}" data-act="${act}" style="--p:${((val - min) / (max - min) * 100).toFixed(1)}%" ${extra}>`;
   const resumoMacros = t => `${fmt(t.kcal, 0)} kcal · ${fmt(t.proteina_g, 0)} g prot`;
@@ -251,6 +262,7 @@
     $$('[data-mod]').forEach(a => a.classList.toggle('on', a.dataset.mod === modAtual().id));
     $('#main').innerHTML = modBar() + (emBreve ? vModulo(rota) : v());
     $('#fab').hidden = !(rota === 'hoje' || rota === 'dia');
+    animarBarras();
     if (emBreve) $('#fab').hidden = true;
     tick();
   }
@@ -268,13 +280,11 @@
       <a class="icon-btn" href="#metas" aria-label="Metas e dados">${ICO.ajuste}</a>
     </header>
     ${cartaoJejum(iso, ehHoje)}
-    <button class="stats" data-act="nutrientes" data-iso="${iso}" aria-label="Ver nutrientes do dia">
-      <span><b>${fmt(t.kcal, 0)}</b><small>kcal</small></span>
-      <span><b>${fmt(t.proteina_g, 0)}</b><small>g proteína</small></span>
-      <span><b>${fmt(t.gordura_g, 0)}</b><small>g gordura</small></span>
-      <span class="go">${ICO.seta}</span>
+    <button class="daybars" data-act="nutrientes" data-iso="${iso}" aria-label="Ver nutrientes do dia">
+      <span class="db-h"><span class="label">${iso === hoje() ? 'Comido hoje' : passado ? 'Comido no dia' : 'Metas do dia'}</span><span class="go">Detalhes ${ICO.seta}</span></span>
+      ${barrasDia(iso, t, feito)}
+      <span class="db-leg"><span><i class="ok"></i>Comido</span><span><i class="pl"></i>Planejado</span></span>
     </button>
-    ${d.refeicoes.some(r => r.feito) ? `<p class="muted small center">Comido até agora: ${resumoMacros(feito)}</p>` : ''}
     <section class="group">
       <h2 class="label">Refeições</h2>
       ${refs.length ? `<div class="rows">${refs.map(r => { const tt = soma(r.itens);
@@ -341,6 +351,7 @@
   }
 
   // ----- Calendário -----
+  let calSel = null;
   let mesCal = (() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); })();
   function vCalendario() {
     const ini = inicioSemana(mesCal), m = mesCal.getMonth(), cells = [];
@@ -354,13 +365,15 @@
       ${cells.map(d => { const iso = isoDe(d), dd = diaDe(iso), js = jejunsDoDia(iso);
         const a = d.getTime(), b = a + DIA_MS;
         const jc = js.length ? `fasting ${js.some(j => j.inicio >= a) ? 'f-start' : ''} ${js.some(j => fimJ(j) <= b) ? 'f-end' : ''}` : '';
-        return `<a class="cal-d ${d.getMonth() !== m ? 'out' : ''} ${iso === hoje() ? 'today' : ''} ${jc}" href="#dia-${iso}">
+        const tag = calSel ? `button data-act="selDia" data-iso="${iso}" aria-pressed="${calSel.has(iso)}"` : `a href="#dia-${iso}"`;
+        return `<${tag} class="cal-d ${d.getMonth() !== m ? 'out' : ''} ${iso === hoje() ? 'today' : ''} ${calSel?.has(iso) ? 'sel' : ''} ${jc}">
           <span class="n">${d.getDate()}</span>
-          <span class="dots">${dd.refeicoes.length ? '<i class="d-ref"></i>' : ''}${dd.rotina.some(r => r.tipo === 'sol') ? '<i class="d-sol"></i>' : ''}${dd.rotina.some(r => r.tipo === 'treino') ? '<i class="d-treino"></i>' : ''}</span></a>`; }).join('')}
+          <span class="dots">${dd.refeicoes.length ? '<i class="d-ref"></i>' : ''}${dd.rotina.some(r => r.tipo === 'sol') ? '<i class="d-sol"></i>' : ''}${dd.rotina.some(r => r.tipo === 'treino') ? '<i class="d-treino"></i>' : ''}</span></${calSel ? 'button' : 'a'}>`; }).join('')}
     </div>
+    ${calSel ? `<div class="selbar"><span class="row-t"><b>${calSel.size ? `${calSel.size} ${calSel.size === 1 ? 'dia selecionado' : 'dias selecionados'}` : 'Toque nos dias'}</b><small>Apaga refeições, rotina e jejuns que começam nesses dias</small></span><div class="row"><button class="btn ghost grow" data-act="calSel">Cancelar</button><button class="btn grow" data-act="apagarDias" ${calSel.size ? '' : 'disabled'}>${ICO.lixo} Apagar</button></div></div>` : `
     <div class="legend"><span><i class="d-ref"></i>Refeição</span><span><i class="d-sol"></i>Sol</span><span><i class="d-treino"></i>Treino</span><span><i class="d-fast"></i>Jejum</span></div>
     ${jj ? `<button class="card-btn" data-act="editarJejum" data-id="${jj.id}">${icone('jejum', 't-fast')}<span class="row-t"><b>${ativo ? 'Em jejum' : 'Próximo jejum'}</b><small>${quando(jj.inicio)} até ${quando(jj.fimPrev)} · ${fmt((jj.fimPrev - jj.inicio) / H, 0)} h</small></span>${ICO.seta}</button>` : ''}
-    <div class="row wrap"><button class="btn" data-act="planejarJejum">Planejar jejum</button><a class="btn ghost" href="#dia-${hoje()}">Ir para hoje</a></div>`;
+    <div class="row wrap"><button class="btn" data-act="planejarJejum">Planejar jejum</button><a class="btn ghost" href="#dia-${hoje()}">Ir para hoje</a><button class="btn ghost" data-act="calSel">Selecionar dias</button></div>`}`;
   }
 
   // ----- Alimentos -----
@@ -384,10 +397,12 @@
     const cat = picker ? filtro.catP : filtro.cat;
     const L = alimentos().filter(f => (!cat || (cat === 'fav' ? ehFav(f.id) : f.categoria === cat)) && (!q || semAcento(f.nome).includes(q)))
       .map(f => ({ f, s: filtro.base === 'kcal' ? (f.kcal ? valor(f, k) / f.kcal * 100 : 0) : valor(f, k) })).sort((a, b) => b.s - a.s);
+    const maior = f => ['proteina_g', 'gordura_g', 'carboidrato_g', 'fibra_g'].map(n => [n, f[n] || 0]).sort((a, b) => b[1] - a[1])[0];
+    const extra = (f, s) => MACROS.some(m => m.k === k) || !s ? '' : ` <i>|</i> ${esc(NUT[k].n.split(' (')[0])} ${fmt(s)} ${NUT[k].u}`;
     if (!L.length) return cat === 'fav' && !q ? '<p class="empty">Nenhum favorito ainda. Abra um alimento e toque na estrela para guardar os que você mais usa.</p>' : '<p class="empty">Nenhum alimento encontrado.</p>';
     return `<div class="rows foods">${L.map(({ f, s }) => `<div class="food"><button class="food-main" data-act="${picker ? 'escolher' : 'verAlimento'}" data-a="${esc(f.id)}">
-      ${foto(f)}<span class="row-t"><b>${esc(f.nome)}</b><small>${esc((CATS[f.categoria] || '').split(',')[0])} <i>|</i> ${fmt(f.kcal, 0)} kcal</small></span>
-      <span class="fv">${s > 0 ? `<b>${fmt(s)}</b><small>${NUT[k].u}</small>` : '<small>–</small>'}</span>${picker ? `<span class="add">${ICO.mais}</span>` : ''}</button>
+      ${foto(f)}<span class="row-t"><b>${esc(f.nome)}</b><small>${esc((CATS[f.categoria] || '').split(',')[0])} <i>|</i> ${fmt(f.kcal, 0)} kcal${extra(f, s)}</small></span>
+      ${(([n, v]) => v > 0 ? `<span class="fv"><small>${NUT[n].n}</small><b>${fmt(v)} g</b></span>` : '<span class="fv"><small>–</small></span>')(maior(f))}${picker ? `<span class="add">${ICO.mais}</span>` : ''}</button>
       ${picker ? '' : `<button class="fav-btn ${ehFav(f.id) ? 'on' : ''}" data-act="fav" data-a="${esc(f.id)}" aria-pressed="${ehFav(f.id)}" aria-label="${ehFav(f.id) ? 'Tirar dos favoritos' : 'Favoritar'} ${esc(f.nome)}">${ICO.estrela}</button>`}</div>`).join('')}</div>`;
   }
 
@@ -483,10 +498,11 @@
 
   // Editar refeição
   const acharRef = (iso, id) => diaEdit(iso).refeicoes.find(r => r.id === id);
+  const refCtx = () => ctx.rasc || acharRef(ctx.iso, ctx.id);
   const passo = f => f?.passo || f?.un || (f?.kcal > 500 ? 5 : 25);
   const unid = (f, g) => f?.un ? ` · ${fmt(g / f.un, 1)} ${f.unNome || 'un'}` : '';
-  function sheetRef(iso, id) {
-    const r = acharRef(iso, id); if (!r) return fechar();
+  function sheetRef(iso, id, rasc) {
+    const r = rasc || acharRef(iso, id); if (!r) return fechar();
     const t = soma(r.itens);
     sheet(`<div class="sheet-h"><div class="head-t"><input class="title-in" value="${esc(r.nome)}" data-act="refNome" aria-label="Nome da refeição"><p class="muted small">${tituloData(iso)}</p></div><button class="icon-btn" data-act="fechar" aria-label="Fechar">${ICO.fechar}</button></div>
       <div class="row wrap"><label class="inline">Horário <input type="time" value="${esc(r.hora || '')}" data-act="refHora"></label><span class="muted small">${resumoMacros(t)} · ${fmt(t.gordura_g, 0)} g gord</span></div>
@@ -494,8 +510,10 @@
         return `<div class="item">${foto(f)}<span class="row-t"><b>${esc(f?.nome || it.a)}</b><small>${fmt(soma([it]).kcal, 0)} kcal${unid(f, it.g)}</small></span>
           <span class="step"><button data-act="menos" data-k="${k}" aria-label="Menos">−</button><input type="number" inputmode="numeric" min="0" value="${it.g}" data-act="itemG" data-k="${k}" aria-label="Gramas"><span class="u">g</span><button data-act="maisG" data-k="${k}" aria-label="Mais">+</button></span>
           <button class="icon-btn sm" data-act="delItem" data-k="${k}" aria-label="Remover">${ICO.fechar}</button></div>`; }).join('')}</div>` : '<p class="empty">Sem alimentos ainda.</p>'}
-      <button class="btn" data-act="addItem">${ICO.mais} Adicionar alimento</button>
-      <div class="row between"><button class="btn ghost danger" data-act="delRef">Apagar refeição</button><button class="btn ghost" data-act="feitoRefSheet">${r.feito ? 'Desmarcar' : 'Marcar como comida'}</button></div>`, { tipo: 'ref', iso, id });
+      ${rasc ? `<button class="btn ghost" data-act="addItem">${ICO.mais} Adicionar alimento</button>
+      <div class="row between"><button class="btn ghost" data-act="fechar">Cancelar</button><button class="btn grow" data-act="addRasc" ${r.itens.length ? '' : 'disabled'}>Adicionar ao dia</button></div>`
+      : `<button class="btn" data-act="addItem">${ICO.mais} Adicionar alimento</button>
+      <div class="row between"><button class="btn ghost danger" data-act="delRef">Apagar refeição</button><button class="btn ghost" data-act="feitoRefSheet">${r.feito ? 'Desmarcar' : 'Marcar como comida'}</button></div>`}`, rasc ? { tipo: 'ref', iso, rasc } : { tipo: 'ref', iso, id });
   }
   function sheetPicker() {
     sheet(`${topo('Escolher alimento', '', 'voltarRef')}
@@ -625,7 +643,7 @@
       ${favs.length ? `<div class="fav-strip">${favs.map(f => foto(f)).join('')}</div>` : ''}
       ${falta ? `<p class="note">${falta}</p>` : ''}
       <div class="field">Objetivo<div class="seg" id="autoObj">${[['equilibrio', 'Equilibrada'], ['proteina', 'Mais proteína'], ['fibra', 'Mais fibra']].map(([v, n], k) => `<button class="${k === 0 ? 'on' : ''}" data-act="autoOp" data-v="${v}">${n}</button>`).join('')}</div></div>
-      <div class="field">Refeições por dia<div class="seg" id="autoRef">${[2, 3].map(v => `<button class="${v === 3 ? 'on' : ''}" data-act="autoOp" data-v="${v}">${v}</button>`).join('')}</div></div>
+      <div class="field">Refeições por dia<div class="seg" id="autoRef">${[1, 2, 3].map(v => `<button class="${v === 3 ? 'on' : ''}" data-act="autoOp" data-v="${v}">${v}</button>`).join('')}</div></div>
       <label class="field">Jejum na semana<select id="autoJejum"><option value="0">Sem jejum longo</option>${[1, 2, 3, 4, 5].map(n => `<option value="${n}">${n} ${n > 1 ? 'dias' : 'dia'} sem comer, com pré-jejum gorduroso</option>`).join('')}</select></label>
       <p class="muted small">O app distribui seus favoritos pelas refeições e ajusta as gramas para chegar perto das suas metas. Depois você aplica no calendário e muda o que quiser.</p>
       <button class="btn" data-act="confirmarAuto" ${falta ? 'disabled' : ''}>Criar dieta</button>`);
@@ -638,7 +656,8 @@
     const miudos = carnes.filter(f => f.categoria === 'miudos'), normais = carnes.filter(f => f.categoria !== 'miudos');
     const metaP = S.metas.proteina_g * (obj === 'proteina' ? 1.15 : 1), metaK = S.metas.kcal, metaC = S.metas.carboidrato_g;
     const pega = (arr, i) => arr.length ? arr[((i % arr.length) + arr.length) % arr.length] : null;
-    const nomes = nRef === 3 ? [['Café da manhã', '08:00'], ['Almoço', '12:30'], ['Jantar', '19:30']] : [['Almoço', '12:30'], ['Jantar', '19:30']];
+    const nomes = nRef === 3 ? [['Café da manhã', '08:00'], ['Almoço', '12:30'], ['Jantar', '19:30']] : nRef === 2 ? [['Almoço', '12:30'], ['Jantar', '19:30']] : [['Refeição', '14:00']];
+    const omad = nRef === 1;
     const addEm = itens => (f, g) => { if (f && g > 0) itens.push({ a: f.id, g: f.un ? Math.max(f.un, Math.round(g / f.un) * f.un) : arred(g, f.kcal > 500 ? 5 : 10) }); };
 
     function refeicao(d, m) {
@@ -646,7 +665,7 @@
       // proteína: ovos no café; miúdos (fígado) no máximo uma vez na semana, na quarta
       let prot = cafe && ovos.length ? pega(ovos, d) : null;
       if (!prot) {
-        const pool = miudos.length && d === diaMiudo && m === nomes.length - 2 ? miudos : (normais.length ? normais : carnes.length ? carnes : ovos);
+        const pool = miudos.length && d === diaMiudo && m === Math.max(0, nomes.length - 2) ? miudos : (normais.length ? normais : carnes.length ? carnes : ovos);
         prot = pega(pool, d * nRef + m);
       }
       const nVeg = obj === 'fibra' ? 2 : 1, vegs = [];
@@ -659,9 +678,13 @@
       const b1 = soma(itens);
       if (carb) add(carb, Math.min(carb.gordura_g > 10 ? 150 : cafe ? 200 : 300, Math.max(cafe ? 100 : 80, (alvoC - b1.carboidrato_g) / (carb.carboidrato_g || 10) * 100)));
       const b2 = soma(itens);
-      add(prot, Math.min(prot.categoria === 'miudos' ? 150 : prot.categoria === 'ovos' ? 250 : prot.categoria === 'laticinios' ? 150 : 400, Math.max(prot.categoria === 'ovos' ? 100 : 120, (alvoP - b2.proteina_g) / (prot.proteina_g || 10) * 100)));
+      add(prot, Math.min(prot.categoria === 'miudos' ? 150 : prot.categoria === 'ovos' ? 250 : prot.categoria === 'laticinios' ? 150 : omad ? 550 : 400, Math.max(prot.categoria === 'ovos' ? 100 : 120, (alvoP - b2.proteina_g) / (prot.proteina_g || 10) * 100)));
+      // 1 refeição no dia: completa a proteína com ovos
+      if (omad) { const b = soma(itens), falta = metaP - b.proteina_g;
+        const p2 = ['miudos', 'ovos', 'laticinios'].includes(prot.categoria) ? pega(normais.filter(f => f !== prot), d + 1) || pega(ovos, d) : pega(ovos, d) || pega(normais.filter(f => f !== prot), d + 1);
+        if (p2 && p2 !== prot && falta > 15) add(p2, Math.min(p2.categoria === 'ovos' ? 250 : 350, falta / (p2.proteina_g || 12) * 100)); }
       const b3 = soma(itens), gord = pega(G.gord, d + m);
-      if (gord) add(gord, Math.min(30, Math.max(0, (alvoK - b3.kcal) / (gord.kcal || 700) * 100)));
+      if (gord) add(gord, Math.min(omad ? 60 : 30, Math.max(0, (alvoK - b3.kcal) / (gord.kcal || 700) * 100)));
       return { id: uid(), nome, hora, feito: false, itens };
     }
     function preJejum(d) {
@@ -681,10 +704,10 @@
       let refs = [];
       if (!diasJejum.has(d)) {
         refs = nomes.map((_, m) => refeicao(d, m));
-        if (d === ini) refs = [...refs.filter(r => r.nome !== 'Jantar'), preJejum(d)];
+        if (d === ini) refs = [...refs.slice(0, -1), preJejum(d)];
         if (d === quebraDia) {
           refs = refs.filter(r => r.nome !== 'Café da manhã');
-          const q = refs.find(r => r.nome === 'Almoço');
+          const q = refs[0];
           if (q) { q.nome = 'Quebra do jejum'; q.hora = '12:00'; q.itens = q.itens.map(it => ({ ...it, g: arred(it.g * 0.6, FOOD(it.a)?.un || 10) })); }
         }
       }
@@ -693,7 +716,7 @@
       dias.push({ refeicoes: refs, rotina: rot });
     }
     const nomeObj = { equilibrio: 'equilibrada', proteina: 'mais proteína', fibra: 'mais fibra' }[obj];
-    return { id: 'minha-' + uid(), nome: `Favoritos · ${nomeObj}`, desc: `${nRef} refeições por dia${nJ ? `, jejum de ${nJ} ${nJ > 1 ? 'dias' : 'dia'}` : ''}. Feita com ${favs.length} favoritos.`, dias, jejum: nJ ? [{ dia: ini, hora: '20:00', horas: 24 * nJ + 16 }] : [] };
+    return { id: 'minha-' + uid(), nome: `Favoritos · ${nomeObj}`, desc: `${nRef} ${nRef === 1 ? 'refeição' : 'refeições'} por dia${nJ ? `, jejum de ${nJ} ${nJ > 1 ? 'dias' : 'dia'}` : ''}. Feita com ${favs.length} favoritos.`, dias, jejum: nJ ? [{ dia: ini, hora: '20:00', horas: 24 * nJ + 16 }] : [] };
   }
 
   // ---------- Receitas (alimentos que juntam outros) ----------
@@ -701,6 +724,7 @@
     const rc = ctx.receita, t = soma(rc.itens), peso = rc.itens.reduce((x, it) => x + it.g, 0);
     sheet(`${topo(rc.id ? 'Editar combinação' : 'Combinar alimentos', 'Junte alimentos e salve como um só')}
       <label class="field">Nome<input type="text" id="rcNome" value="${esc(rc.nome)}" placeholder="Café com óleo de coco, Água com sal…" data-act="rcNome"></label>
+      ${rc.itens.length ? iconesReceita(rc) : ''}
       ${rc.itens.length ? `<div class="rows">${rc.itens.map((it, k) => { const f = FOOD(it.a);
         return `<div class="item">${foto(f)}<span class="row-t"><b>${esc(f?.nome || it.a)}</b><small>${fmt(soma([it]).kcal, 0)} kcal${unid(f, it.g)}</small></span>
           <span class="step"><button data-act="menos" data-k="${k}" aria-label="Menos">−</button><input type="number" inputmode="decimal" min="0" value="${it.g}" data-act="itemG" data-k="${k}" aria-label="Gramas"><span class="u">g</span><button data-act="maisG" data-k="${k}" aria-label="Mais">+</button></span>
@@ -709,19 +733,31 @@
       ${rc.itens.length ? `<p class="muted small center">1 porção = ${fmt(peso, 0)} g · ${resumoMacros(t)} · ${fmt(t.gordura_g, 0)} g gord${t.sodio_mg ? ` · ${fmt(t.sodio_mg, 0)} mg sódio` : ''}</p>` : ''}
       <div class="row between">${rc.id ? '<button class="btn ghost danger" data-act="delReceita">Apagar</button>' : '<span></span>'}<button class="btn" data-act="salvarReceita" ${rc.itens.length ? '' : 'disabled'}>Salvar</button></div>`, { ...ctx, tipo: 'receita' });
   }
+  const todosIcones = () => [...new Set(DB.alimentos.map(f => f.img).filter(Boolean))];
+  function iconesReceita(rc) {
+    const sel = rc.imgs || [], modo = rc.modo || (sel.length > 1 ? 'juntos' : 'um'), dos = [...new Set(rc.itens.map(it => FOOD(it.a)?.img).filter(Boolean))];
+    const ops = rc.todos ? [...new Set([...dos, ...todosIcones()])] : dos;
+    const prev = receitaComoAlimento(rc);
+    return `<div class="field">Ícone
+      <div class="ic-pick">${foto(prev, 'ic-prev')}<div class="seg sm" id="rcModo">${[['um', 'Um ícone'], ['juntos', 'Juntar até 3']].map(([v, n]) => `<button class="${modo === v ? 'on' : ''}" data-act="rcModo" data-v="${v}">${n}</button>`).join('')}</div></div>
+      <p class="muted small">${modo === 'juntos' ? 'Toque nos ícones que quer juntar, na ordem.' : sel.length ? 'Toque em outro para trocar.' : 'Automático: usa o alimento com mais calorias. Toque em um para trocar.'}</p>
+      <div class="ic-grid">${ops.map(i => `<button class="ic-op ${sel.includes(i) ? 'on' : ''}" data-act="rcIcone" data-i="${esc(i)}" aria-pressed="${sel.includes(i)}"><img src="${i}" alt="" loading="lazy">${sel.includes(i) && sel.length > 1 ? `<em>${sel.indexOf(i) + 1}</em>` : ''}</button>`).join('')}
+        ${rc.todos ? '' : `<button class="ic-op more" data-act="rcTodos">Mais</button>`}</div>
+      ${sel.length ? '<button class="link" data-act="rcAuto">Voltar ao automático</button>' : ''}</div>`;
+  }
   function receitaComoAlimento(rc) {
     const t = soma(rc.itens), peso = rc.itens.reduce((x, it) => x + it.g, 0) || 1, k = 100 / peso;
     const maior = [...rc.itens].sort((a, b) => valor(FOOD(b.a), 'kcal') * b.g - valor(FOOD(a.a), 'kcal') * a.g || b.g - a.g)[0];
     const f = { id: rc.id || 'rc-' + uid(), nome: rc.nome.trim() || 'Minha combinação', categoria: 'receitas', receita: clone(rc.itens), un: peso, unNome: 'porção',
-      img: FOOD(maior?.a)?.img, fonte: 'Combinação criada por você', beneficio: rc.itens.map(it => `${FOOD(it.a)?.nome} ${it.g} g`).join(' + '), micro: {} };
+      img: rc.imgs?.[0] || FOOD(maior?.a)?.img, imgs: rc.imgs?.length > 1 ? [...rc.imgs] : undefined, icones: rc.imgs?.length ? [...rc.imgs] : undefined, fonte: 'Combinação criada por você', beneficio: rc.itens.map(it => `${FOOD(it.a)?.nome} ${it.g} g`).join(' + '), micro: {} };
     MACROS.forEach(m => f[m.k] = +(t[m.k] * k).toFixed(2));
     MICROS.forEach(m => { if (t[m.k]) f.micro[m.k] = +(t[m.k] * k).toFixed(3); });
     return f;
   }
-  const itensCtx = () => ctx.receita ? ctx.receita.itens : acharRef(ctx.iso, ctx.id).itens;
+  const itensCtx = () => ctx.receita ? ctx.receita.itens : refCtx().itens;
 
   // ---------- Ações ----------
-  const reRef = () => { if (ctx.receita) return sheetReceita(); salvar(); sheetRef(ctx.iso, ctx.id); render(); };
+  const reRef = () => { if (ctx.receita) return sheetReceita(); if (ctx.rasc) return sheetRef(ctx.iso, null, ctx.rasc); salvar(); sheetRef(ctx.iso, ctx.id); render(); };
   const CLICK = {
     areas: () => sheetAreas(),
     fechar, okConfirmar: () => { const a = ctx.acao; fechar(); a && a(); },
@@ -733,10 +769,11 @@
     abrirRef: el => sheetRef(el.dataset.iso, el.dataset.id),
     abrirRot: el => sheetRot(el.dataset.iso, el.dataset.id),
     novaRef: el => sheetNovaRef(el.dataset.iso),
-    refBranco: el => { const r = { id: uid(), nome: 'Refeição', hora: '', feito: false, itens: [] }; diaEdit(el.dataset.iso).refeicoes.push(r); salvar(); render(); sheetRef(el.dataset.iso, r.id); },
-    refModelo: el => { const r = ref(el.dataset.k); diaEdit(el.dataset.iso).refeicoes.push(r); S.exemplo = false; salvar(); render(); sheetRef(el.dataset.iso, r.id); },
+    refBranco: el => sheetRef(el.dataset.iso, null, { id: uid(), nome: 'Refeição', hora: '', feito: false, itens: [] }),
+    refModelo: el => sheetRef(el.dataset.iso, null, ref(el.dataset.k)),
+    addRasc: () => { const r = ctx.rasc, iso = ctx.iso; if (!r.itens.length) return; diaEdit(iso).refeicoes.push(r); S.exemplo = false; salvar(); fechar(); render(); toast(`${r.nome} adicionada em ${tituloData(iso)}`); },
     addItem: () => { filtro.qP = ''; filtro.catP = S.favs.length ? 'fav' : ''; sheetPicker(); },
-    voltarRef: () => ctx.receita ? sheetReceita() : sheetRef(ctx.iso, ctx.id),
+    voltarRef: () => ctx.receita ? sheetReceita() : sheetRef(ctx.iso, ctx.id, ctx.rasc),
     voltarPicker: () => sheetPicker(),
     escolher: el => sheetGramas(el.dataset.a),
     confirmarItem: el => { const g = +$('#gIn').value; if (g > 0) { itensCtx().push({ a: el.dataset.a, g }); toast(`${FOOD(el.dataset.a).nome} adicionado`); } reRef(); },
@@ -769,6 +806,12 @@
     },
     encerrarJejum: el => { const id = el.dataset.id; confirmar('Encerrar o jejum agora?', () => { const j = S.jejuns.find(x => x.id === id); j.fim = Date.now(); salvar(); render(); toast(`Jejum de ${duracao((j.fim - j.inicio) / H)} registrado`); }, 'Encerrar'); },
     delJejum: () => { const id = ctx.id; confirmar('Apagar este jejum?', () => { S.jejuns = S.jejuns.filter(j => j.id !== id); salvar(); render(); }, 'Apagar'); },
+    calSel: () => { calSel = calSel ? null : new Set(); render(); },
+    selDia: el => { const iso = el.dataset.iso; calSel.has(iso) ? calSel.delete(iso) : calSel.add(iso); render(); },
+    apagarDias: () => { const sel = new Set(calSel), n = sel.size;
+      confirmar(`Apagar tudo o que está em ${n} ${n === 1 ? 'dia' : 'dias'}?`, () => {
+        sel.forEach(iso => delete S.dias[iso]); S.jejuns = S.jejuns.filter(j => !sel.has(isoDe(new Date(j.inicio))));
+        S.exemplo = false; calSel = null; salvar(); render(); toast(`${n} ${n === 1 ? 'dia limpo' : 'dias limpos'}`); }, 'Apagar'); },
     mes: el => { mesCal = new Date(mesCal.getFullYear(), mesCal.getMonth() + +el.dataset.d, 1); render(); },
     sem: el => { semRes = somaDias(semRes, +el.dataset.d); render(); },
     soFeito: el => { soFeito = el.dataset.v === '1'; render(); },
@@ -786,7 +829,15 @@
     modeloAoDia: el => { const iso = $('#addData').value || hoje(); diaEdit(iso).refeicoes.push(ref(el.dataset.k)); salvar(); fechar(); render(); toast(`Adicionado em ${tituloData(iso)}`); },
     novoAlimento: () => sheetNovoAlimento(),
     novaReceita: () => { ctx = {}; sheet('', { receita: { id: null, nome: '', itens: [] } }); sheetReceita(); },
-    editarReceita: el => { const f = FOOD(el.dataset.a); sheet('', { receita: { id: f.id, nome: f.nome, itens: clone(f.receita) } }); sheetReceita(); },
+    editarReceita: el => { const f = FOOD(el.dataset.a); sheet('', { receita: { id: f.id, nome: f.nome, itens: clone(f.receita), imgs: [...(f.icones || [])] } }); sheetReceita(); },
+    rcIcone: el => { const rc = ctx.receita, i = el.dataset.i; rc.nome = $('#rcNome').value; rc.imgs = rc.imgs || [];
+      const juntos = (rc.modo || (rc.imgs.length > 1 ? 'juntos' : 'um')) === 'juntos';
+      if (!juntos) rc.imgs = rc.imgs[0] === i ? [] : [i];
+      else if (rc.imgs.includes(i)) rc.imgs = rc.imgs.filter(x => x !== i); else if (rc.imgs.length >= 3) return toast('Junte no máximo 3 ícones'); else rc.imgs.push(i);
+      sheetReceita(); },
+    rcModo: el => { const rc = ctx.receita; rc.nome = $('#rcNome').value; rc.modo = el.dataset.v; if (rc.modo === 'um') rc.imgs = (rc.imgs || []).slice(0, 1); sheetReceita(); },
+    rcTodos: () => { ctx.receita.nome = $('#rcNome').value; ctx.receita.todos = true; sheetReceita(); },
+    rcAuto: () => { ctx.receita.nome = $('#rcNome').value; ctx.receita.imgs = []; sheetReceita(); },
     salvarReceita: () => {
       ctx.receita.nome = $('#rcNome').value; if (!ctx.receita.itens.length) return;
       const f = receitaComoAlimento(ctx.receita), i = S.custom.findIndex(x => x.id === f.id);
@@ -842,8 +893,8 @@
     meta: el => { $('#v-meta-' + el.dataset.k).textContent = `${fmt(+el.value, 0)} ${el.dataset.u}`; S.metas[el.dataset.k] = +el.value; salvar(); },
   };
   const CHANGE = {
-    refNome: el => { acharRef(ctx.iso, ctx.id).nome = el.value.trim() || 'Refeição'; salvar(); render(); },
-    refHora: el => { acharRef(ctx.iso, ctx.id).hora = el.value; salvar(); render(); },
+    refNome: el => { refCtx().nome = el.value.trim() || 'Refeição'; if (!ctx.rasc) { salvar(); render(); } },
+    refHora: el => { refCtx().hora = el.value; if (!ctx.rasc) { salvar(); render(); } },
     itemG: el => { itensCtx()[+el.dataset.k].g = Math.max(0, +el.value || 0); reRef(); },
     rcNome: el => { ctx.receita.nome = el.value; },
     importar: el => { const f = el.files[0]; if (!f) return; const r = new FileReader(); r.onload = () => importar(r.result); r.readAsText(f); },
@@ -865,7 +916,7 @@
     MICROS.forEach(m => { const v = fd.get(m.k); if (v !== '' && v != null) f.micro[m.k] = +v; });
     S.custom.push(f); salvar(); fechar(); render(); toast(`${f.nome} cadastrado`);
   });
-  window.addEventListener('hashchange', () => { fechar(); render(); window.scrollTo(0, 0); });
+  window.addEventListener('hashchange', () => { fechar(); calSel = null; render(); window.scrollTo(0, 0); });
   document.addEventListener('visibilitychange', () => { if (!document.hidden) render(); });
   if (novoEstado) salvar();
   render();
