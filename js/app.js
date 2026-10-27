@@ -96,7 +96,7 @@
     jantar_fibra: ['Jantar', '19:30', [['ovo', 200], ['quiabo', 150], ['berinjela', 150], ['queijo-minas', 40], ['azeite', 15]], 'Ovos com quiabo e berinjela'],
     pre_jejum: ['Pré-jejum', '19:00', [['picanha', 350], ['gema', 51], ['manteiga', 30], ['tutano', 40], ['abacate', 150], ['couve', 60]], 'Pré-jejum para 1 a 2 dias'],
     pre_jejum_forte: ['Pré-jejum', '19:00', [['costela', 400], ['ovo', 100], ['gema', 51], ['manteiga', 40], ['cheddar', 50], ['abacate', 150], ['brocolis', 80]], 'Pré-jejum para 3 dias ou mais'],
-    quebra: ['Quebra do jejum', '12:00', [['ovo', 100], ['abacate', 80], ['patinho', 120], ['abobrinha', 100]], 'Quebra do jejum, leve'],
+    quebra: ['Quebra do jejum', '12:00', [['contrafile', 250], ['ovo', 150], ['figado', 80], ['batata-doce', 150], ['abacate', 100], ['espinafre', 80], ['manteiga', 15]], 'Quebra do jejum, forte e nutritiva'],
   };
   const ref = (key, hora) => { const [nome, h, it] = MODELOS[key]; return { id: uid(), nome, hora: hora || h, feito: false, itens: it.map(([a, g]) => ({ a, g })) }; };
   const sol = (min = 20, hora = '09:00') => ({ id: uid(), tipo: 'sol', min, hora, nota: '', feito: false });
@@ -132,7 +132,7 @@
       D(['cafe_queijo', 'almoco_fibra', 'lanche_iogurte', 'jantar_musculo'], [sol(30), cam()]),
       D(['almoco_alcatra', 'lanche_fibra', 'jantar_ovos'], [sol(30)]),
     ] },
-    { id: 'rec-jejum2', nome: 'Jejum de 2 dias', desc: 'Pré-jejum gordo na terça às 19 h. Quarta e quinta sem comer. Quebra leve na sexta ao meio-dia (cerca de 65 h).', jejum: [{ dia: 1, hora: '20:00', horas: 64 }], dias: [
+    { id: 'rec-jejum2', nome: 'Jejum de 2 dias', desc: 'Pré-jejum gordo na terça às 19 h. Quarta e quinta sem comer. Quebra forte e nutritiva na sexta ao meio-dia (cerca de 64 h).', jejum: [{ dia: 1, hora: '20:00', horas: 64 }], dias: [
       D(['almoco_contra', 'jantar_patinho'], [sol(), mus()]),
       D(['almoco_alcatra', 'pre_jejum'], [sol(), cam()]),
       D([], [sol(), cam()]),
@@ -141,14 +141,14 @@
       D(['cafe_queijo', 'almoco_cordeiro', 'jantar_patinho'], [sol(30), mus()]),
       D(['cafe_queijo', 'almoco_contra', 'jantar_ovos'], [sol(30)]),
     ] },
-    { id: 'rec-jejum4', nome: 'Jejum de 4 dias', desc: 'Pré-jejum forte no domingo às 19 h, jejum de segunda a quinta e quebra leve na sexta ao meio-dia (cerca de 112 h).', jejum: [{ dia: 6, hora: '20:00', horas: 112 }], dias: [
+    { id: 'rec-jejum4', nome: 'Jejum de 4 dias', desc: 'Pré-jejum forte na segunda às 19 h, jejum de terça a sexta e quebra forte e nutritiva no sábado ao meio-dia (cerca de 112 h).', jejum: [{ dia: 0, hora: '20:00', horas: 112 }], dias: [
+      D(['cafe_ovos', 'almoco_alcatra', 'pre_jejum_forte'], [sol(), mus()]),
       D([], [sol(), cam()]),
       D([], [sol(), cam()]),
       D([], [sol(), cam()]),
       D([], [sol()]),
-      D(['quebra', 'jantar_patinho'], [sol()]),
+      D(['quebra', 'jantar_patinho'], [sol(30)]),
       D(['cafe_ovos', 'almoco_contra', 'lanche_castanhas', 'jantar_musculo'], [sol(30), mus()]),
-      D(['cafe_queijo', 'almoco_alcatra', 'pre_jejum_forte'], [sol(30)]),
     ] },
   ];
 
@@ -200,6 +200,8 @@
     if (substituir) s.jejuns = s.jejuns.filter(j => !(j.inicio >= ini && j.inicio < fim && j.inicio > Date.now()));
     for (const j of dt.jejum || []) {
       const d = somaDias(segunda, j.dia), [hh, mm] = j.hora.split(':').map(Number); d.setHours(hh, mm, 0, 0);
+      const igual = s.jejuns.find(x => x.inicio === d.getTime());
+      if (igual) { if (!igual.fim) igual.fimPrev = d.getTime() + j.horas * H; continue; }
       s.jejuns.push({ id: uid(), inicio: d.getTime(), fimPrev: d.getTime() + j.horas * H, fim: null });
     }
   }
@@ -695,8 +697,19 @@
       add(pega(G.veg, d), 100);
       return { id: uid(), nome: 'Pré-jejum', hora: '19:00', feito: false, itens };
     }
-    // pré-jejum na terça (1 ou 2 dias) ou no domingo (3 dias ou mais), jejum nos dias seguintes, quebra no dia depois
-    const ini = nJ ? (nJ >= 3 ? 6 : 1) : -1;
+    // Quebra forte e nutritiva: carne, ovos, fígado, tubérculo, verduras e gordura
+    function quebra(d) {
+      const itens = [], add = addEm(itens), carne = pega(normais.length ? normais : carnes, d) || pega(G.prot, d);
+      add(carne, Math.min(300, Math.max(200, metaP * 0.45 / (carne.proteina_g || 20) * 100)));
+      const ov = pega(ovos, d); if (ov && ov !== carne) add(ov, 150);
+      const mi = miudos[0]; if (mi && mi !== carne) add(mi, 80);
+      const tb = pega(G.tub, d) || pega(G.fruta, d); if (tb) add(tb, tb.gordura_g > 10 ? 100 : 150);
+      [pega(G.veg, d), pega(G.veg, d + 1)].filter((v, k, a) => v && a.indexOf(v) === k).forEach(v => add(v, 100));
+      const gd = pega(G.gord, d); if (gd) add(gd, gd.kcal > 500 ? 15 : 100);
+      return { id: uid(), nome: 'Quebra do jejum', hora: '12:00', feito: false, itens };
+    }
+    // pré-jejum na terça (1 ou 2 dias) ou na segunda (3 dias ou mais), no mesmo dia em que o jejum começa; quebra no dia depois do último dia de jejum
+    const ini = nJ ? (nJ >= 3 ? 0 : 1) : -1;
     const diasJejum = new Set(Array.from({ length: nJ }, (_, k) => (ini + 1 + k) % 7)), quebraDia = nJ ? (ini + nJ + 1) % 7 : -1;
     const diaMiudo = [2, 3, 0, 4, 5, 6, 1].find(d => !diasJejum.has(d) && d !== ini && d !== quebraDia);
     const dias = [];
@@ -707,8 +720,7 @@
         if (d === ini) refs = [...refs.slice(0, -1), preJejum(d)];
         if (d === quebraDia) {
           refs = refs.filter(r => r.nome !== 'Café da manhã');
-          const q = refs[0];
-          if (q) { q.nome = 'Quebra do jejum'; q.hora = '12:00'; q.itens = q.itens.map(it => ({ ...it, g: arred(it.g * 0.6, FOOD(it.a)?.un || 10) })); }
+          refs[0] = quebra(d);
         }
       }
       const rot = [sol(diasJejum.has(d) ? 30 : 20)];
