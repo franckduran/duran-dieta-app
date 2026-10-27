@@ -437,3 +437,5 @@ span.ph.ph-multi { position: relative; display: block; padding: 0; }
 .ic-op.on { border-color: var(--red); background: rgb(239 59 59 / 0.12); }
 .ic-op em { position: absolute; top: 3px; right: 5px; font-style: normal; font-size: 0.7rem; font-weight: 600; color: var(--red-2); }
 .link { background: none; border: 0; color: var(--muted); text-decoration: underline; font-size: 0.85rem; padding: 4px 0; align-self: flex-start; }
+.grid-ops .op:last-child:nth-child(odd) { grid-column: 1 / -1; }
+.t-gota { color: var(--blue); }

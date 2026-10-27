@@ -4,7 +4,7 @@ src, out = sys.argv[1], sys.argv[2]
 d = json.load(open(src))
 refs = dict(d['meta']['referencias_vd'])
 refs['sodio_mg'] = {'nome': 'Sódio', 'ref': 1500, 'unidade': 'mg'}  # ingestão adequada (DRI)
-cats = d['meta']['categorias'] + [{'id': 'laticinios', 'nome': 'Laticínios naturais'}, {'id': 'bebidas', 'nome': 'Bebidas'}, {'id': 'extras', 'nome': 'Mel e sal'}]
+cats = d['meta']['categorias'] + [{'id': 'laticinios', 'nome': 'Laticínios naturais'}, {'id': 'bebidas', 'nome': 'Líquidos'}, {'id': 'extras', 'nome': 'Mel e sal'}]
 U = 'USDA FoodData Central (SR Legacy), aprox.'
 extras = [
  dict(id='mel', nome='Mel', categoria='extras', kcal=304, proteina_g=0.3, gordura_g=0, carboidrato_g=82.4, fibra_g=0.2,
