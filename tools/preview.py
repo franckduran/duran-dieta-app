@@ -3,7 +3,7 @@ import re, sys
 root, out = sys.argv[1], sys.argv[2]
 html = open(f'{root}/index.html').read()
 body = html.split('<!--APP-->')[1].split('<!--/APP-->')[0]
-css = open(f'{root}/css/app.css').read()
+css = open(f'{root}/css/app.css').read() + '\n' + open(f'{root}/css/recursos.css').read()
 import base64, os
 fonte = f'{root}/fonts/inter-latin.woff2'
 if os.path.exists(fonte):
