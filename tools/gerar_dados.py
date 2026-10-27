@@ -2,10 +2,35 @@
 import json, sys
 src, out = sys.argv[1], sys.argv[2]
 d = json.load(open(src))
-refs = d['meta']['referencias_vd']
-cats = d['meta']['categorias'] + [{'id': 'laticinios', 'nome': 'Laticínios naturais'}]
+refs = dict(d['meta']['referencias_vd'])
+refs['sodio_mg'] = {'nome': 'Sódio', 'ref': 1500, 'unidade': 'mg'}  # ingestão adequada (DRI)
+cats = d['meta']['categorias'] + [{'id': 'laticinios', 'nome': 'Laticínios naturais'}, {'id': 'bebidas', 'nome': 'Bebidas'}, {'id': 'extras', 'nome': 'Mel e sal'}]
 U = 'USDA FoodData Central (SR Legacy), aprox.'
 extras = [
+ dict(id='mel', nome='Mel', categoria='extras', kcal=304, proteina_g=0.3, gordura_g=0, carboidrato_g=82.4, fibra_g=0.2,
+      micronutrientes=dict(potassio_mg=52, vit_b2_mg=0.04, sodio_mg=4),
+      beneficio='Açúcar natural com um pouco de minerais e compostos antioxidantes.', obs='Prefira mel puro de produtor. Evite durante o jejum.', fonte=U),
+ dict(id='agua', nome='Água', categoria='bebidas', kcal=0, proteina_g=0, gordura_g=0, carboidrato_g=0, fibra_g=0,
+      micronutrientes=dict(calcio_mg=3, magnesio_mg=1, sodio_mg=4),
+      beneficio='Base da hidratação, principalmente nos dias de jejum.', obs='Minerais variam conforme a fonte. Veja o rótulo da água mineral.', fonte=U),
+ dict(id='cafe', nome='Café coado (sem açúcar)', categoria='bebidas', kcal=1, proteina_g=0.1, gordura_g=0, carboidrato_g=0, fibra_g=0,
+      micronutrientes=dict(potassio_mg=49, magnesio_mg=3, vit_b2_mg=0.08, vit_b3_mg=0.19, manganes_mg=0.02, sodio_mg=2),
+      beneficio='Praticamente sem calorias; não quebra o jejum quando tomado puro.', fonte=U),
+ dict(id='oleo-coco', nome='Óleo de coco', categoria='gorduras', kcal=892, proteina_g=0, gordura_g=99.1, carboidrato_g=0, fibra_g=0,
+      micronutrientes=dict(vit_e_mg=0.1, vit_k_ug=0.6),
+      beneficio='Gordura rica em triglicerídeos de cadeia média (TCM), muito usada no café.', obs='Prefira o extravirgem prensado a frio.', fonte=U),
+ dict(id='sal-refinado', nome='Sal refinado', categoria='extras', kcal=0, proteina_g=0, gordura_g=0, carboidrato_g=0, fibra_g=0,
+      micronutrientes=dict(sodio_mg=38758, calcio_mg=24, ferro_mg=0.3, magnesio_mg=1, potassio_mg=8),
+      beneficio='Sódio quase puro.', obs='Industrializado: prefira os sais integrais.', fonte=U),
+ dict(id='sal-marinho', nome='Sal marinho integral', categoria='extras', kcal=0, proteina_g=0, gordura_g=0, carboidrato_g=0, fibra_g=0,
+      micronutrientes=dict(sodio_mg=36000, magnesio_mg=300, calcio_mg=150, potassio_mg=150),
+      beneficio='Sal não refinado, com um pouco de magnésio e outros minerais. Ajuda a repor sódio no jejum.', obs='Valores médios: variam muito por marca. Confira o rótulo.', fonte='Média de rótulos, aprox.'),
+ dict(id='sal-himalaia', nome='Sal rosa do Himalaia', categoria='extras', kcal=0, proteina_g=0, gordura_g=0, carboidrato_g=0, fibra_g=0,
+      micronutrientes=dict(sodio_mg=37000, potassio_mg=280, calcio_mg=160, magnesio_mg=100, ferro_mg=0.4),
+      beneficio='Sal de rocha não refinado, com traços de potássio, cálcio e magnésio.', obs='Valores médios: variam muito por marca. Confira o rótulo.', fonte='Média de rótulos, aprox.'),
+ dict(id='sal-grosso', nome='Sal grosso integral', categoria='extras', kcal=0, proteina_g=0, gordura_g=0, carboidrato_g=0, fibra_g=0,
+      micronutrientes=dict(sodio_mg=37500, magnesio_mg=150, calcio_mg=100, potassio_mg=100),
+      beneficio='Sal grosso sem refino, bom para churrasco e para moer na hora.', obs='Valores médios: variam muito por marca. Confira o rótulo.', fonte='Média de rótulos, aprox.'),
  dict(id='costela', nome='Costela bovina', categoria='carnes', kcal=388, proteina_g=14.4, gordura_g=36.2, carboidrato_g=0, fibra_g=0,
       micronutrientes=dict(vit_b12_ug=2.6, zinco_mg=3.4, selenio_ug=13, ferro_mg=1.6, vit_b3_mg=2.6, potassio_mg=232),
       beneficio='Corte gordo e saboroso, muito bom para a refeição pré-jejum.', fonte=U),
@@ -52,18 +77,23 @@ ICONES = {
  'seedling': 'aspargo chia', 'garlic': 'alho',
  'avocado': 'abacate', 'green_apple': 'goiaba', 'grapes': 'maracuja', 'kiwi_fruit': 'kiwi', 'melon': 'mamao', 'tangerine': 'laranja',
  'strawberry': 'morango', 'banana': 'banana', 'mango': 'manga', 'pineapple': 'abacaxi', 'red_apple': 'maca', 'blueberries': 'mirtilo', 'lemon': 'limao',
- 'olive': 'azeite', 'butter': 'manteiga sebo ghee', 'jar': 'banha', 'bone': 'tutano', 'coconut': 'coco', 'chestnut': 'castanha-para nozes amendoas',
+ 'olive': 'azeite', 'butter': 'manteiga sebo ghee', 'jar': 'banha', 'bone': 'tutano', 'coconut': 'coco oleo-coco', 'chestnut': 'castanha-para nozes amendoas',
  'peanuts': 'castanha-caju', 'beans': 'linhaca',
- 'cheese_wedge': 'mussarela parmesao cheddar queijo-minas ricota', 'glass_of_milk': 'nata leite', 'bowl_with_spoon': 'iogurte',
+ 'cheese_wedge': 'mussarela parmesao cheddar queijo-minas ricota', 'glass_of_milk': 'nata leite', 'bowl_with_spoon': 'iogurte', 'honey_pot': 'mel', 'droplet': 'agua', 'hot_beverage': 'cafe', 'salt': 'sal-refinado sal-marinho sal-himalaia sal-grosso',
 }
 ICONE = {a: k for k, v in ICONES.items() for a in v.split()}
 unid = {'ovo': 50, 'gema': 17, 'clara': 33, 'ovo-codorna': 10, 'ovo-pata': 70, 'castanha-para': 5, 'nozes': 5,
         'banana': 100, 'laranja': 130, 'maca': 150, 'kiwi': 75, 'limao': 60, 'alho': 5, 'tomate': 120, 'cebola': 110}
+medidas = {'agua': (250, 'copo'), 'cafe': (100, 'xícara'), 'oleo-coco': (13, 'colher de sopa'), 'mel': (21, 'colher de sopa'),
+          'sal-refinado': (5, 'colher de chá'), 'sal-marinho': (5, 'colher de chá'), 'sal-himalaia': (5, 'colher de chá'), 'sal-grosso': (5, 'colher de chá'),
+          'manteiga': (10, 'colher de chá'), 'azeite': (13, 'colher de sopa')}
 foods = []
 for a in d['alimentos'] + extras:
     f = {k: a.get(k) for k in ('id','nome','categoria','kcal','proteina_g','gordura_g','carboidrato_g','fibra_g','beneficio','obs','fonte')}
     f['micro'] = {k: v for k, v in (a.get('micronutrientes') or {}).items() if v is not None}
     if a['id'] in unid: f['un'] = unid[a['id']]
+    if a['id'] in medidas: f['un'], f['unNome'] = medidas[a['id']]
+    if a['id'].startswith('sal-'): f['passo'] = 1
     if a['id'] in ICONE: f['img'] = 'img/alimentos/' + ICONE[a['id']] + '.webp'
     foods.append({k: v for k, v in f.items() if v not in (None, '')})
 js = ('// Gerado a partir de dieta/alimentos.json. Valores por 100 g.\n'

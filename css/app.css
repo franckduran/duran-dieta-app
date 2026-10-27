@@ -339,3 +339,43 @@ details.more[open] { display: flex; flex-direction: column; gap: 12px; }
 .fav-strip { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
 .fav-strip .ph { width: 40px; height: 40px; background: var(--raise); }
 .btn[disabled] { opacity: 0.4; pointer-events: none; }
+
+/* Áreas: Corpo, Mente, Business. No celular só a barra da área atual aparece embaixo. */
+.nav .area, .nav .sub { display: contents; }
+.nav .area-t, .nav .mod { display: none; }
+body.mod-vazio .nav { display: none; }
+@media (min-width: 960px) {
+  .nav { overflow-y: auto; }
+  .nav .area { display: flex; flex-direction: column; gap: 2px; margin-bottom: 18px; }
+  .nav .area-t { display: block; padding: 0 12px 6px; color: var(--dim); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.14em; }
+  .nav .mod { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 9px 12px; border-radius: 12px; color: var(--muted); font-size: 0.95rem; }
+  .nav .mod small { color: var(--dim); font-size: 0.7rem; }
+  .nav .mod.on { color: var(--fg); background: var(--card-2); }
+  .nav .mod[data-mod="dieta"].on { background: transparent; font-weight: 600; }
+  .nav .sub { display: flex; flex-direction: column; gap: 2px; padding-left: 8px; margin-bottom: 4px; }
+  body.mod-vazio .nav { display: flex; }
+  body.mod-vazio .nav .sub { display: none; }
+  .modbar { display: none !important; }
+}
+.modbar { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px 6px 12px; margin-bottom: -8px; border-radius: 999px; border: 1px solid var(--line); background: rgb(21 21 23 / 0.7); font-size: 0.82rem; color: var(--fg); }
+.modbar .mb-a { color: var(--muted); }
+.modbar .mb-sep { color: var(--dim); }
+.modbar b { font-weight: 600; }
+.modbar svg { width: 16px; height: 16px; color: var(--muted); }
+.row-main.cur { border-color: rgb(239 59 59 / 0.45); }
+.row-main.cur > svg { color: var(--red-2); }
+.t-corpo { color: var(--red-2); }
+.t-mente { color: var(--violet); }
+.t-business { color: var(--teal); }
+.soon { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 10px; padding: 48px 20px; border: 1px dashed var(--line-2); border-radius: 22px; }
+.soon-i { width: 56px; height: 56px; display: grid; place-items: center; border-radius: 16px; background: var(--card-2); color: var(--muted); }
+.soon-i svg { width: 26px; height: 26px; }
+
+/* Lista de alimentos com estrela */
+.food { align-items: stretch; }
+.food-main { flex: 1; min-width: 0; display: flex; align-items: center; padding: 0; border: 0; background: none; text-align: left; }
+.fav-btn { width: 48px; flex: none; display: grid; place-items: center; border: 0; border-left: 1px solid var(--line); background: transparent; color: var(--dim); }
+.fav-btn svg { width: 20px; height: 20px; }
+.fav-btn.on { color: var(--amber); }
+.fav-btn.on svg { fill: currentColor; }
+.fv { padding-right: 12px; }

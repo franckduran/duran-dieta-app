@@ -5,7 +5,7 @@
   // ---------- Base de alimentos e nutrientes ----------
   const DB = window.DB;
   const REFS = DB.refs;
-  const CATS = Object.fromEntries(DB.categorias.map(c => [c.id, c.nome]));
+  const CATS = Object.fromEntries([...DB.categorias, { id: 'receitas', nome: 'Minhas combinações' }].map(c => [c.id, c.nome]));
   const MACROS = [
     { k: 'kcal', n: 'Calorias', c: 'Kcal', u: 'kcal' },
     { k: 'proteina_g', n: 'Proteína', c: 'Prot', u: 'g' },
@@ -65,6 +65,12 @@
     check: '<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
     lixo: '<svg viewBox="0 0 24 24"><path d="M4.5 7h15M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13"/></svg>',
     fechar: '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+    baixo: '<svg viewBox="0 0 24 24"><path d="M7 10l5 5 5-5"/></svg>',
+    em_breve: '<svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="M9 12h6"/></svg>',
+    dieta: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/></svg>',
+    intelectual: '<svg viewBox="0 0 24 24"><path d="M4 5.5C6.5 4.5 9.5 4.5 12 6c2.5-1.5 5.5-1.5 8-.5v13c-2.5-1-5.5-1-8 .5-2.5-1.5-5.5-1.5-8-.5z"/><path d="M12 6v13.5"/></svg>',
+    financeiro: '<svg viewBox="0 0 24 24"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg>',
+    trabalho: '<svg viewBox="0 0 24 24"><rect x="3.5" y="7" width="17" height="12.5" rx="2.5"/><path d="M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7M3.5 12.5h17"/></svg>',
     estrela: '<svg viewBox="0 0 24 24"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/></svg>',
     ajuste: '<svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>',
   };
@@ -216,14 +222,36 @@
   // ---------- Rotas ----------
   let rota = 'hoje', diaRota = null;
   const TABS = ['hoje', 'calendario', 'alimentos', 'dietas', 'resumo'];
+  const AREAS = [
+    { id: 'corpo', nome: 'Corpo', mods: [{ id: 'dieta', nome: 'Dieta', rota: 'hoje', pronto: true }, { id: 'treino', nome: 'Treino', rota: 'treino' }] },
+    { id: 'mente', nome: 'Mente', mods: [{ id: 'intelectual', nome: 'Intelectual', rota: 'intelectual', desc: 'Estudo e leitura' }] },
+    { id: 'business', nome: 'Business', mods: [{ id: 'financeiro', nome: 'Financeiro', rota: 'financeiro' }, { id: 'trabalho', nome: 'Trabalho', rota: 'trabalho' }] },
+  ];
+  const MODS = Object.fromEntries(AREAS.flatMap(a => a.mods.map(m => [m.id, { ...m, area: a.nome }])));
+  const modAtual = () => MODS[rota] && !MODS[rota].pronto ? MODS[rota] : MODS.dieta;
+  const modBar = () => { const m = modAtual(); return `<button class="modbar" data-act="areas" aria-label="Trocar de área"><span class="mb-a">${m.area}</span><span class="mb-sep">/</span><b>${m.nome}</b>${ICO.baixo}</button>`; };
+  function vModulo(id) {
+    const m = MODS[id];
+    return `<header class="head"><div class="head-t"><p class="eyebrow">${m.area}</p><h1>${m.nome}</h1></div></header>
+      <div class="soon"><span class="soon-i">${ICO.em_breve}</span><b>${m.nome} entra aqui em breve</b><p class="muted">Vamos montar esta parte depois de terminar a Dieta.</p></div>`;
+  }
+  function sheetAreas() {
+    const atual = modAtual().id;
+    sheet(`${topo('Áreas')}
+      ${AREAS.map(a => `<section class="group"><h3 class="label">${a.nome}</h3><div class="rows">${a.mods.map(m => `<a class="row-main solo ${m.id === atual ? 'cur' : ''}" href="#${m.rota}">${icone(m.id, 't-' + a.id)}<span class="row-t"><b>${m.nome}</b><small>${m.pronto ? 'Hoje, calendário, alimentos, dietas e resumo' : (m.desc ? m.desc + ' · ' : '') + 'Em breve'}</small></span>${m.id === atual ? ICO.check : ICO.seta}</a>`).join('')}</div></section>`).join('')}`);
+  }
   function render() {
     const h = (location.hash || '').slice(1);
     if (/^dia-\d{4}-\d{2}-\d{2}$/.test(h)) { rota = 'dia'; diaRota = h.slice(4); }
-    else rota = TABS.includes(h) || h === 'metas' ? h : 'hoje';
+    else rota = TABS.includes(h) || h === 'metas' || (MODS[h] && !MODS[h].pronto) ? h : 'hoje';
     $$('[data-nav]').forEach(a => a.classList.toggle('on', a.dataset.nav === (rota === 'dia' ? 'calendario' : rota)));
-    const v = { hoje: () => vDia(hoje(), true), dia: () => vDia(diaRota), calendario: vCalendario, alimentos: vAlimentos, dietas: vDietas, resumo: vResumo, metas: vMetas }[rota];
-    $('#main').innerHTML = v();
+    const v = MODS[rota] && !MODS[rota].pronto ? null : { hoje: () => vDia(hoje(), true), dia: () => vDia(diaRota), calendario: vCalendario, alimentos: vAlimentos, dietas: vDietas, resumo: vResumo, metas: vMetas }[rota];
+    const emBreve = MODS[rota] && !MODS[rota].pronto;
+    document.body.classList.toggle('mod-vazio', !!emBreve);
+    $$('[data-mod]').forEach(a => a.classList.toggle('on', a.dataset.mod === modAtual().id));
+    $('#main').innerHTML = modBar() + (emBreve ? vModulo(rota) : v());
     $('#fab').hidden = !(rota === 'hoje' || rota === 'dia');
+    if (emBreve) $('#fab').hidden = true;
     tick();
   }
 
@@ -337,7 +365,7 @@
 
   // ----- Alimentos -----
   const filtro = { q: '', cat: S.favs.length ? 'fav' : '', ord: 'proteina_g', base: 'g' };
-  const chipsCat = act => [['fav', '★ Favoritos'], ['', 'Todos'], ...Object.entries(CATS)].map(([k, n]) => `<button class="chip ${filtro.cat === k ? 'on' : ''} ${k === 'fav' ? 'fav' : ''}" data-act="${act}" data-c="${k}">${n.split(',')[0]}</button>`).join('');
+  const chipsCat = act => [['fav', '★ Favoritos'], ['', 'Todos'], ...Object.entries(CATS)].map(([k, n]) => `<button class="chip ${(act === 'catP' ? filtro.catP : filtro.cat) === k ? 'on' : ''} ${k === 'fav' ? 'fav' : ''}" data-act="${act}" data-c="${k}">${n.split(',')[0]}</button>`).join('');
   function vAlimentos() {
     return `
     <header class="head"><div class="head-t"><p class="eyebrow">${alimentos().length} alimentos · por 100 g</p><h1>Alimentos</h1></div></header>
@@ -347,17 +375,20 @@
       ${chipsCat('cat')}
     </div>
     <div id="lista">${listaAlimentos()}</div>
-    <button class="btn ghost" data-act="novoAlimento">Cadastrar alimento</button>`;
+    <div class="row wrap"><button class="btn ghost grow" data-act="novaReceita">${ICO.mais} Combinar alimentos</button><button class="btn ghost grow" data-act="novoAlimento">Cadastrar do zero</button></div>
+    <p class="muted small">Combinar junta alimentos que já existem (por exemplo, café + óleo de coco + leite, ou água + sal) num só, com os nutrientes somados.</p>`;
   }
   const semAcento = s => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
   function listaAlimentos(picker = false) {
     const q = semAcento((picker ? filtro.qP : filtro.q) || '').trim(), k = filtro.ord;
-    const L = alimentos().filter(f => (!filtro.cat || (filtro.cat === 'fav' ? ehFav(f.id) : f.categoria === filtro.cat)) && (!q || semAcento(f.nome).includes(q)))
+    const cat = picker ? filtro.catP : filtro.cat;
+    const L = alimentos().filter(f => (!cat || (cat === 'fav' ? ehFav(f.id) : f.categoria === cat)) && (!q || semAcento(f.nome).includes(q)))
       .map(f => ({ f, s: filtro.base === 'kcal' ? (f.kcal ? valor(f, k) / f.kcal * 100 : 0) : valor(f, k) })).sort((a, b) => b.s - a.s);
-    if (!L.length) return filtro.cat === 'fav' && !q ? '<p class="empty">Nenhum favorito ainda. Abra um alimento e toque na estrela para guardar os que você mais usa.</p>' : '<p class="empty">Nenhum alimento encontrado.</p>';
-    return `<div class="rows foods">${L.map(({ f, s }) => `<button class="food" data-act="${picker ? 'escolher' : 'verAlimento'}" data-a="${esc(f.id)}">
-      ${foto(f)}<span class="row-t"><b>${esc(f.nome)}${ehFav(f.id) ? ' <span class="star-on" aria-label="favorito">★</span>' : ''}</b><small>${esc((CATS[f.categoria] || '').split(',')[0])} <i>|</i> ${fmt(f.kcal, 0)} kcal</small></span>
-      <span class="fv">${s > 0 ? `<b>${fmt(s)}</b><small>${NUT[k].u}</small>` : '<small>–</small>'}</span>${picker ? `<span class="add">${ICO.mais}</span>` : ''}</button>`).join('')}</div>`;
+    if (!L.length) return cat === 'fav' && !q ? '<p class="empty">Nenhum favorito ainda. Abra um alimento e toque na estrela para guardar os que você mais usa.</p>' : '<p class="empty">Nenhum alimento encontrado.</p>';
+    return `<div class="rows foods">${L.map(({ f, s }) => `<div class="food"><button class="food-main" data-act="${picker ? 'escolher' : 'verAlimento'}" data-a="${esc(f.id)}">
+      ${foto(f)}<span class="row-t"><b>${esc(f.nome)}</b><small>${esc((CATS[f.categoria] || '').split(',')[0])} <i>|</i> ${fmt(f.kcal, 0)} kcal</small></span>
+      <span class="fv">${s > 0 ? `<b>${fmt(s)}</b><small>${NUT[k].u}</small>` : '<small>–</small>'}</span>${picker ? `<span class="add">${ICO.mais}</span>` : ''}</button>
+      ${picker ? '' : `<button class="fav-btn ${ehFav(f.id) ? 'on' : ''}" data-act="fav" data-a="${esc(f.id)}" aria-pressed="${ehFav(f.id)}" aria-label="${ehFav(f.id) ? 'Tirar dos favoritos' : 'Favoritar'} ${esc(f.nome)}">${ICO.estrela}</button>`}</div>`).join('')}</div>`;
   }
 
   // ----- Dietas -----
@@ -452,14 +483,15 @@
 
   // Editar refeição
   const acharRef = (iso, id) => diaEdit(iso).refeicoes.find(r => r.id === id);
-  const passo = f => f?.un || (f?.kcal > 500 ? 5 : 25);
+  const passo = f => f?.passo || f?.un || (f?.kcal > 500 ? 5 : 25);
+  const unid = (f, g) => f?.un ? ` · ${fmt(g / f.un, 1)} ${f.unNome || 'un'}` : '';
   function sheetRef(iso, id) {
     const r = acharRef(iso, id); if (!r) return fechar();
     const t = soma(r.itens);
     sheet(`<div class="sheet-h"><div class="head-t"><input class="title-in" value="${esc(r.nome)}" data-act="refNome" aria-label="Nome da refeição"><p class="muted small">${tituloData(iso)}</p></div><button class="icon-btn" data-act="fechar" aria-label="Fechar">${ICO.fechar}</button></div>
       <div class="row wrap"><label class="inline">Horário <input type="time" value="${esc(r.hora || '')}" data-act="refHora"></label><span class="muted small">${resumoMacros(t)} · ${fmt(t.gordura_g, 0)} g gord</span></div>
       ${r.itens.length ? `<div class="rows">${r.itens.map((it, k) => { const f = FOOD(it.a);
-        return `<div class="item">${foto(f)}<span class="row-t"><b>${esc(f?.nome || it.a)}</b><small>${fmt(soma([it]).kcal, 0)} kcal${f?.un ? ` · ${fmt(it.g / f.un, 1)} un` : ''}</small></span>
+        return `<div class="item">${foto(f)}<span class="row-t"><b>${esc(f?.nome || it.a)}</b><small>${fmt(soma([it]).kcal, 0)} kcal${unid(f, it.g)}</small></span>
           <span class="step"><button data-act="menos" data-k="${k}" aria-label="Menos">−</button><input type="number" inputmode="numeric" min="0" value="${it.g}" data-act="itemG" data-k="${k}" aria-label="Gramas"><span class="u">g</span><button data-act="maisG" data-k="${k}" aria-label="Mais">+</button></span>
           <button class="icon-btn sm" data-act="delItem" data-k="${k}" aria-label="Remover">${ICO.fechar}</button></div>`; }).join('')}</div>` : '<p class="empty">Sem alimentos ainda.</p>'}
       <button class="btn" data-act="addItem">${ICO.mais} Adicionar alimento</button>
@@ -473,10 +505,10 @@
     setTimeout(() => $('#buscaP')?.focus({ preventScroll: true }), 60);
   }
   function sheetGramas(a) {
-    const f = FOOD(a), st = passo(f), g0 = f.un ? f.un * 2 : (f.kcal > 500 ? 20 : 150), max = f.un ? f.un * 12 : (f.kcal > 500 ? 150 : 600);
+    const f = FOOD(a), st = passo(f), g0 = f.passo ? 2 : f.un ? f.un * (f.un >= 100 ? 1 : 2) : (f.kcal > 500 ? 20 : 150), max = f.passo ? 30 : f.un ? f.un * 12 : (f.kcal > 500 ? 150 : 600);
     sheet(`${topo(esc(f.nome), esc(CATS[f.categoria] || ''), 'voltarPicker')}
       <div class="hero-food">${foto(f, 'lg')}</div>
-      <div class="slider"><div class="slider-h"><span>Quantidade</span><b id="gLbl">${g0} g${f.un ? ` · ${fmt(g0 / f.un, 1)} un` : ''}</b></div>${range('gIn', 0, max, st, g0, 'gramas', `data-a="${esc(a)}"`)}</div>
+      <div class="slider"><div class="slider-h"><span>Quantidade</span><b id="gLbl">${g0} g${unid(f, g0)}</b></div>${range('gIn', 0, max, st, g0, 'gramas', `data-a="${esc(a)}"`)}</div>
       <p class="muted small center" id="gPrev">${resumoMacros(soma([{ a, g: g0 }]))}</p>
       <button class="btn" data-act="confirmarItem" data-a="${esc(a)}">Adicionar</button>`, { ...ctx, tipo: 'gramas' });
   }
@@ -514,15 +546,17 @@
   }
 
   // Detalhe do alimento
-  function sheetAlimento(a, g = 100) {
+  function sheetAlimento(a, g) {
     const f = FOOD(a); if (!f) return;
+    g = g ?? (f.passo ? 5 : f.receita ? f.un : f.un >= 100 ? f.un : 100);
     const t = soma([{ a, g }]);
     sheet(`<div class="sheet-h"><div class="head-t"><h2>${esc(f.nome)}</h2><p class="muted small">${esc(CATS[f.categoria] || '')}</p></div>
         <button class="icon-btn star ${ehFav(a) ? 'on' : ''}" data-act="fav" data-a="${esc(a)}" aria-pressed="${ehFav(a)}" aria-label="${ehFav(a) ? 'Tirar dos favoritos' : 'Adicionar aos favoritos'}">${ICO.estrela}</button>
         <button class="icon-btn" data-act="fechar" aria-label="Fechar">${ICO.fechar}</button></div>
       <div class="hero-food">${foto(f, 'lg')}${f.beneficio ? `<p>${esc(f.beneficio)}</p>` : ''}</div>
       ${f.obs ? `<p class="note">${esc(f.obs)}</p>` : ''}
-      <div class="slider"><div class="slider-h"><span>Quantidade</span><b id="vqLbl">${g} g</b></div>${range('qG', 10, f.kcal > 500 ? 200 : 500, f.un || 10, g, 'qtd', `data-a="${esc(a)}"`)}</div>
+      ${f.receita ? `<button class="btn ghost" data-act="editarReceita" data-a="${esc(a)}">Editar combinação</button>` : ''}
+      <div class="slider"><div class="slider-h"><span>Quantidade</span><b id="vqLbl">${g} g${unid(f, g)}</b></div>${range('qG', f.passo ? 1 : 10, f.passo ? 30 : f.receita ? Math.max(500, f.un * 3) : f.un >= 100 ? f.un * 8 : f.kcal > 500 ? 200 : 500, passo(f), g, 'qtd', `data-a="${esc(a)}"`)}</div>
       <div class="quad" id="quad">${quad(t)}</div>
       <details class="more"><summary>Vitaminas e minerais</summary><div id="micA">${listaMicros(t, 1, true)}</div></details>
       <div class="row wrap"><input type="date" id="addData" value="${hoje()}" aria-label="Dia"><button class="btn grow" data-act="addAoDia" data-a="${esc(a)}">Adicionar ao dia</button></div>
@@ -568,7 +602,7 @@
     sheet(`${topo('Cadastrar alimento', 'Valores por 100 g')}
       <form id="formAl" class="form">
         <label class="field">Nome<input name="nome" required></label>
-        <label class="field">Categoria<select name="categoria">${Object.entries(CATS).map(([k, n]) => `<option value="${k}">${n}</option>`).join('')}</select></label>
+        <label class="field">Categoria<select name="categoria">${Object.entries(CATS).filter(([k]) => k !== 'receitas').map(([k, n]) => `<option value="${k}">${n}</option>`).join('')}</select></label>
         <div class="grid2">${MACROS.map(m => `<label class="field">${m.n} (${m.u})<input name="${m.k}" type="number" step="0.1" min="0" value="0"></label>`).join('')}</div>
         <details class="more"><summary>Vitaminas e minerais</summary><div class="grid2">${MICROS.map(m => `<label class="field">${m.n} (${m.u})<input name="${m.k}" type="number" step="0.01" min="0"></label>`).join('')}</div></details>
         <button class="btn" type="submit">Salvar alimento</button></form>`);
@@ -662,9 +696,34 @@
     return { id: 'minha-' + uid(), nome: `Favoritos · ${nomeObj}`, desc: `${nRef} refeições por dia${nJ ? `, jejum de ${nJ} ${nJ > 1 ? 'dias' : 'dia'}` : ''}. Feita com ${favs.length} favoritos.`, dias, jejum: nJ ? [{ dia: ini, hora: '20:00', horas: 24 * nJ + 16 }] : [] };
   }
 
+  // ---------- Receitas (alimentos que juntam outros) ----------
+  function sheetReceita() {
+    const rc = ctx.receita, t = soma(rc.itens), peso = rc.itens.reduce((x, it) => x + it.g, 0);
+    sheet(`${topo(rc.id ? 'Editar combinação' : 'Combinar alimentos', 'Junte alimentos e salve como um só')}
+      <label class="field">Nome<input type="text" id="rcNome" value="${esc(rc.nome)}" placeholder="Café com óleo de coco, Água com sal…" data-act="rcNome"></label>
+      ${rc.itens.length ? `<div class="rows">${rc.itens.map((it, k) => { const f = FOOD(it.a);
+        return `<div class="item">${foto(f)}<span class="row-t"><b>${esc(f?.nome || it.a)}</b><small>${fmt(soma([it]).kcal, 0)} kcal${unid(f, it.g)}</small></span>
+          <span class="step"><button data-act="menos" data-k="${k}" aria-label="Menos">−</button><input type="number" inputmode="decimal" min="0" value="${it.g}" data-act="itemG" data-k="${k}" aria-label="Gramas"><span class="u">g</span><button data-act="maisG" data-k="${k}" aria-label="Mais">+</button></span>
+          <button class="icon-btn sm" data-act="delItem" data-k="${k}" aria-label="Remover">${ICO.fechar}</button></div>`; }).join('')}</div>` : '<p class="empty">Adicione os alimentos que fazem parte.</p>'}
+      <button class="btn ghost" data-act="addItem">${ICO.mais} Adicionar alimento</button>
+      ${rc.itens.length ? `<p class="muted small center">1 porção = ${fmt(peso, 0)} g · ${resumoMacros(t)} · ${fmt(t.gordura_g, 0)} g gord${t.sodio_mg ? ` · ${fmt(t.sodio_mg, 0)} mg sódio` : ''}</p>` : ''}
+      <div class="row between">${rc.id ? '<button class="btn ghost danger" data-act="delReceita">Apagar</button>' : '<span></span>'}<button class="btn" data-act="salvarReceita" ${rc.itens.length ? '' : 'disabled'}>Salvar</button></div>`, { ...ctx, tipo: 'receita' });
+  }
+  function receitaComoAlimento(rc) {
+    const t = soma(rc.itens), peso = rc.itens.reduce((x, it) => x + it.g, 0) || 1, k = 100 / peso;
+    const maior = [...rc.itens].sort((a, b) => valor(FOOD(b.a), 'kcal') * b.g - valor(FOOD(a.a), 'kcal') * a.g || b.g - a.g)[0];
+    const f = { id: rc.id || 'rc-' + uid(), nome: rc.nome.trim() || 'Minha combinação', categoria: 'receitas', receita: clone(rc.itens), un: peso, unNome: 'porção',
+      img: FOOD(maior?.a)?.img, fonte: 'Combinação criada por você', beneficio: rc.itens.map(it => `${FOOD(it.a)?.nome} ${it.g} g`).join(' + '), micro: {} };
+    MACROS.forEach(m => f[m.k] = +(t[m.k] * k).toFixed(2));
+    MICROS.forEach(m => { if (t[m.k]) f.micro[m.k] = +(t[m.k] * k).toFixed(3); });
+    return f;
+  }
+  const itensCtx = () => ctx.receita ? ctx.receita.itens : acharRef(ctx.iso, ctx.id).itens;
+
   // ---------- Ações ----------
-  const reRef = () => { salvar(); sheetRef(ctx.iso, ctx.id); render(); };
+  const reRef = () => { if (ctx.receita) return sheetReceita(); salvar(); sheetRef(ctx.iso, ctx.id); render(); };
   const CLICK = {
+    areas: () => sheetAreas(),
     fechar, okConfirmar: () => { const a = ctx.acao; fechar(); a && a(); },
     fab: () => sheetAdicionar(rota === 'dia' ? diaRota : hoje()),
     voltarAdd: () => sheetAdicionar(ctx.iso),
@@ -676,14 +735,14 @@
     novaRef: el => sheetNovaRef(el.dataset.iso),
     refBranco: el => { const r = { id: uid(), nome: 'Refeição', hora: '', feito: false, itens: [] }; diaEdit(el.dataset.iso).refeicoes.push(r); salvar(); render(); sheetRef(el.dataset.iso, r.id); },
     refModelo: el => { const r = ref(el.dataset.k); diaEdit(el.dataset.iso).refeicoes.push(r); S.exemplo = false; salvar(); render(); sheetRef(el.dataset.iso, r.id); },
-    addItem: () => { filtro.qP = ''; sheetPicker(); },
-    voltarRef: () => sheetRef(ctx.iso, ctx.id),
+    addItem: () => { filtro.qP = ''; filtro.catP = S.favs.length ? 'fav' : ''; sheetPicker(); },
+    voltarRef: () => ctx.receita ? sheetReceita() : sheetRef(ctx.iso, ctx.id),
     voltarPicker: () => sheetPicker(),
     escolher: el => sheetGramas(el.dataset.a),
-    confirmarItem: el => { const g = +$('#gIn').value; if (g > 0) { acharRef(ctx.iso, ctx.id).itens.push({ a: el.dataset.a, g }); toast(`${FOOD(el.dataset.a).nome} adicionado`); } reRef(); },
-    menos: el => { const it = acharRef(ctx.iso, ctx.id).itens[+el.dataset.k]; it.g = Math.max(0, it.g - passo(FOOD(it.a))); reRef(); },
-    maisG: el => { const it = acharRef(ctx.iso, ctx.id).itens[+el.dataset.k]; it.g += passo(FOOD(it.a)); reRef(); },
-    delItem: el => { acharRef(ctx.iso, ctx.id).itens.splice(+el.dataset.k, 1); reRef(); },
+    confirmarItem: el => { const g = +$('#gIn').value; if (g > 0) { itensCtx().push({ a: el.dataset.a, g }); toast(`${FOOD(el.dataset.a).nome} adicionado`); } reRef(); },
+    menos: el => { const it = itensCtx()[+el.dataset.k]; it.g = Math.max(0, it.g - passo(FOOD(it.a))); reRef(); },
+    maisG: el => { const it = itensCtx()[+el.dataset.k]; it.g += passo(FOOD(it.a)); reRef(); },
+    delItem: el => { itensCtx().splice(+el.dataset.k, 1); reRef(); },
     delRef: () => { const d = diaEdit(ctx.iso); d.refeicoes = d.refeicoes.filter(r => r.id !== ctx.id); salvar(); fechar(); render(); },
     feitoRefSheet: () => { const r = acharRef(ctx.iso, ctx.id); r.feito = !r.feito; reRef(); },
     addSol: el => sheetRot(el.dataset.iso, null, 'sol'),
@@ -722,12 +781,25 @@
     ord: el => { filtro.ord = el.dataset.k; fechar(); render(); },
     base: el => { filtro.base = el.dataset.b; $$('[data-act=base]').forEach(b => b.classList.toggle('on', b === el)); render(); },
     cat: el => { filtro.cat = el.dataset.c; render(); },
-    catP: el => { filtro.cat = el.dataset.c; $$('[data-act=catP]').forEach(b => b.classList.toggle('on', b === el)); $('#listaP').innerHTML = listaAlimentos(true); },
+    catP: el => { filtro.catP = el.dataset.c; $$('[data-act=catP]').forEach(b => b.classList.toggle('on', b === el)); $('#listaP').innerHTML = listaAlimentos(true); },
     addAoDia: el => { const iso = $('#addData').value || hoje(), g = +$('#qG').value; const d = diaEdit(iso); let r = d.refeicoes.find(x => x.nome === 'Avulsos'); if (!r) { r = { id: uid(), nome: 'Avulsos', hora: '', feito: false, itens: [] }; d.refeicoes.push(r); } r.itens.push({ a: el.dataset.a, g }); salvar(); fechar(); render(); toast(`Adicionado em ${tituloData(iso)}`); },
     modeloAoDia: el => { const iso = $('#addData').value || hoje(); diaEdit(iso).refeicoes.push(ref(el.dataset.k)); salvar(); fechar(); render(); toast(`Adicionado em ${tituloData(iso)}`); },
     novoAlimento: () => sheetNovoAlimento(),
+    novaReceita: () => { ctx = {}; sheet('', { receita: { id: null, nome: '', itens: [] } }); sheetReceita(); },
+    editarReceita: el => { const f = FOOD(el.dataset.a); sheet('', { receita: { id: f.id, nome: f.nome, itens: clone(f.receita) } }); sheetReceita(); },
+    salvarReceita: () => {
+      ctx.receita.nome = $('#rcNome').value; if (!ctx.receita.itens.length) return;
+      const f = receitaComoAlimento(ctx.receita), i = S.custom.findIndex(x => x.id === f.id);
+      if (i >= 0) S.custom[i] = f; else S.custom.push(f);
+      if (!ehFav(f.id)) S.favs.push(f.id);
+      salvar(); fechar(); filtro.cat = 'receitas'; render(); toast(`“${f.nome}” salvo em Minhas combinações`);
+    },
+    delReceita: () => { const id = ctx.receita.id; confirmar('Apagar esta combinação?', () => { S.custom = S.custom.filter(f => f.id !== id); S.favs = S.favs.filter(x => x !== id); salvar(); render(); }, 'Apagar'); },
     fav: el => { const a = el.dataset.a; S.favs = ehFav(a) ? S.favs.filter(x => x !== a) : [...S.favs, a]; salvar(); const on = ehFav(a);
-      el.classList.toggle('on', on); el.setAttribute('aria-pressed', on); el.setAttribute('aria-label', on ? 'Tirar dos favoritos' : 'Adicionar aos favoritos'); render(); toast(on ? 'Adicionado aos favoritos' : 'Removido dos favoritos'); },
+      $$(`[data-act=fav][data-a="${a}"]`).forEach(b => { b.classList.toggle('on', on); b.setAttribute('aria-pressed', on); });
+      if (filtro.cat === 'fav' && !on && $('#lista')) $('#lista').innerHTML = listaAlimentos();
+      if ($('#sheet').hidden) { /* lista */ } else if (rota === 'alimentos' && $('#lista')) $('#lista').innerHTML = listaAlimentos();
+      toast(on ? 'Adicionado aos favoritos' : 'Removido dos favoritos'); },
     gerarAuto: () => sheetAuto(),
     confirmarAuto: () => {
       const op = { obj: $('#autoObj .on')?.dataset.v || 'equilibrio', ref: +($('#autoRef .on')?.dataset.v || 3), jejum: +$('#autoJejum').value };
@@ -762,8 +834,8 @@
   const INPUT = {
     busca: el => { filtro.q = el.value; $('#lista').innerHTML = listaAlimentos(); },
     buscaP: el => { filtro.qP = el.value; $('#listaP').innerHTML = listaAlimentos(true); },
-    gramas: el => { const f = FOOD(el.dataset.a), g = +el.value; $('#gLbl').textContent = `${g} g${f.un ? ` · ${fmt(g / f.un, 1)} un` : ''}`; $('#gPrev').textContent = resumoMacros(soma([{ a: el.dataset.a, g }])); },
-    qtd: el => { const g = +el.value, t = soma([{ a: el.dataset.a, g }]); $('#vqLbl').textContent = g + ' g'; $('#quad').innerHTML = quad(t); $('#micA').innerHTML = listaMicros(t, 1, true); },
+    gramas: el => { const f = FOOD(el.dataset.a), g = +el.value; $('#gLbl').textContent = `${g} g${unid(f, g)}`; $('#gPrev').textContent = resumoMacros(soma([{ a: el.dataset.a, g }])); },
+    qtd: el => { const g = +el.value, t = soma([{ a: el.dataset.a, g }]); $('#vqLbl').textContent = `${g} g${unid(FOOD(el.dataset.a), g)}`; $('#quad').innerHTML = quad(t); $('#micA').innerHTML = listaMicros(t, 1, true); },
     rotMin: el => { $('#v-rMin').textContent = el.value + ' min'; },
     jHoras: el => { $('#v-jH').textContent = rotHoras(+el.value); jPrev(); },
     jPrev: () => jPrev(),
@@ -772,7 +844,8 @@
   const CHANGE = {
     refNome: el => { acharRef(ctx.iso, ctx.id).nome = el.value.trim() || 'Refeição'; salvar(); render(); },
     refHora: el => { acharRef(ctx.iso, ctx.id).hora = el.value; salvar(); render(); },
-    itemG: el => { acharRef(ctx.iso, ctx.id).itens[+el.dataset.k].g = Math.max(0, +el.value || 0); reRef(); },
+    itemG: el => { itensCtx()[+el.dataset.k].g = Math.max(0, +el.value || 0); reRef(); },
+    rcNome: el => { ctx.receita.nome = el.value; },
     importar: el => { const f = el.files[0]; if (!f) return; const r = new FileReader(); r.onload = () => importar(r.result); r.readAsText(f); },
   };
 
