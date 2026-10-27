@@ -1,0 +1,48 @@
+/* Componentes dos recursos novos (desfazer, fases do jejum, peso, lista de compras, sugestões).
+   Usa só as variáveis de cor e raio do app.css, para seguir o visual dele. */
+
+/* Aviso com Desfazer */
+.toast { display: flex; align-items: center; gap: 14px; width: max-content; }
+.toast .undo { flex: none; border: 0; background: transparent; color: var(--red-2); font-weight: 600; padding: 4px 2px; }
+
+/* Etiqueta pequena ao lado de um título */
+.badge { display: inline-block; vertical-align: 1px; margin-left: 6px; padding: 1px 7px; border-radius: 999px; font-size: 0.68rem; font-weight: 500; letter-spacing: 0.02em; color: var(--red-2); background: rgb(239 59 59 / 0.1); border: 1px solid rgb(239 59 59 / 0.25); }
+
+/* Fase do jejum no cartão */
+.phase { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 12px; text-align: left; background: var(--card-2); border: 1px solid var(--line); border-radius: 12px; }
+.phase > svg { color: var(--dim); }
+.phase-k { flex: none; min-width: 38px; height: 28px; padding: 0 6px; display: grid; place-items: center; border-radius: 8px; background: var(--raise); color: var(--muted); font-size: 0.75rem; font-variant-numeric: tabular-nums; }
+.row-item.cur { border-color: rgb(239 59 59 / 0.35); }
+.row-item.cur .phase-k { color: var(--red-2); }
+.row-item .row-main .phase-k + .row-t small { white-space: normal; }
+.fast.meta .ring-c b { color: var(--red-2); }
+
+/* Ferramentas no fim do dia */
+.day-tools { justify-content: center; }
+.btn.sm { min-height: 36px; padding: 0 14px; font-size: 0.85rem; }
+.t-peso, .t-balanca { color: var(--teal); }
+
+/* Peso */
+.wnums { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.wnums b { font-size: 1.8rem; font-weight: 600; letter-spacing: -0.03em; }
+.wnums b i { font-style: normal; font-size: 0.9rem; color: var(--muted); font-weight: 400; }
+.wnums small { color: var(--muted); }
+.wchart svg { display: block; width: 100%; height: 120px; overflow: visible; stroke: none; }
+.wline { fill: none; stroke: var(--fg); stroke-width: 1.6; vector-effect: non-scaling-stroke; }
+.wdot { fill: var(--fg); }
+.wfast { fill: rgb(239 59 59 / 0.14); }
+.wleg { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; color: var(--dim); font-size: 0.72rem; }
+.wleg span { display: inline-flex; align-items: center; gap: 6px; }
+.wleg i { display: inline-block; height: 5px; }
+
+/* Sugestões para completar o dia */
+.sug { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; background: var(--card-2); border: 1px solid var(--line); border-radius: var(--r); }
+.sug-f { display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* Lista de compras */
+.shop .row-main.done .row-t b { color: var(--muted); text-decoration: line-through; }
+.shop .tick { margin-right: 0; width: 34px; height: 34px; }
+.shop .row-main.done .tick { background: var(--red); border-color: var(--red); color: #fff; }
+
+/* Histórico de jejuns */
+.row-t .bar { margin-top: 6px; height: 4px; }
