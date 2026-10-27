@@ -5,6 +5,7 @@
   // ---------- Base de alimentos e nutrientes ----------
   const DB = window.DB;
   const REFS = DB.refs;
+  const DBMAP = new Map(DB.alimentos.map(f => [f.id, f]));
   const CATS = Object.fromEntries([...DB.categorias, { id: 'receitas', nome: 'Minhas combinações' }].map(c => [c.id, c.id === 'bebidas' ? 'Líquidos' : c.nome]));
   const MACROS = [
     { k: 'kcal', n: 'Calorias', c: 'Kcal', u: 'kcal' },
@@ -74,6 +75,10 @@
     trabalho: '<svg viewBox="0 0 24 24"><rect x="3.5" y="7" width="17" height="12.5" rx="2.5"/><path d="M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7M3.5 12.5h17"/></svg>',
     gota: '<svg viewBox="0 0 24 24"><path d="M12 3.5c3 4 6 7.2 6 10.5a6 6 0 0 1-12 0c0-3.3 3-6.5 6-10.5z"/></svg>',
     estrela: '<svg viewBox="0 0 24 24"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/></svg>',
+    balanca: '<svg viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17" rx="4"/><path d="M8.5 9.5a5 5 0 0 1 7 0M12 9.5l1.5-1.5"/></svg>',
+    lista: '<svg viewBox="0 0 24 24"><path d="M9 6.5h11M9 12h11M9 17.5h11"/><path d="M4 6.5l1 1 2-2M4 12l1 1 2-2M4 17.5l1 1 2-2"/></svg>',
+    historico: '<svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.4-5.7M4 4.5v3.5h3.5"/><path d="M12 8v4l2.5 2"/></svg>',
+    copiar: '<svg viewBox="0 0 24 24"><rect x="8.5" y="8.5" width="11" height="11" rx="2.5"/><path d="M15.5 8.5V6.5a2 2 0 0 0-2-2h-7a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h2"/></svg>',
     ajuste: '<svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>',
   };
 
@@ -100,7 +105,13 @@
     pre_jejum_forte: ['Pré-jejum', '19:00', [['costela', 400], ['ovo', 100], ['gema', 51], ['manteiga', 40], ['cheddar', 50], ['abacate', 150], ['brocolis', 80]], 'Pré-jejum para 3 dias ou mais'],
     quebra: ['Quebra do jejum', '12:00', [['contrafile', 250], ['ovo', 150], ['figado', 80], ['batata-doce', 150], ['abacate', 100], ['espinafre', 80], ['manteiga', 15]], 'Quebra do jejum, forte e nutritiva'],
   };
-  const ref = (key, hora) => { const [nome, h, it] = MODELOS[key]; return { id: uid(), nome, hora: hora || h, feito: false, itens: it.map(([a, g]) => ({ a, g })) }; };
+  // Refeição nova a partir de um modelo (pronto do app ou salvo por você, com id 'salva-…')
+  const ref = (key, hora) => {
+    const sv = MODELOS[key] ? null : S.refsSalvas.find(r => r.id === key);
+    if (sv) return { id: uid(), nome: sv.nome, hora: hora || sv.hora || '', feito: false, itens: clone(sv.itens) };
+    const [nome, h, it] = MODELOS[key]; return { id: uid(), nome, hora: hora || h, feito: false, itens: it.map(([a, g]) => ({ a, g })) };
+  };
+  const tituloModelo = k => MODELOS[k]?.[3] || S.refsSalvas.find(r => r.id === k)?.nome || 'Refeição';
   const sol = (min = 20, hora = '09:00') => ({ id: uid(), tipo: 'sol', min, hora, nota: '', feito: false });
   const treino = (min, nota, hora = '17:30') => ({ id: uid(), tipo: 'treino', min, hora, nota, feito: false });
   const mus = () => treino(45, 'Musculação'), cam = () => treino(30, 'Caminhada', '07:00');
@@ -162,15 +173,44 @@
     aplicarDieta(RECS[3], inicioSemana(new Date()), true, s);
     return s;
   }
-  try { S = JSON.parse(localStorage.getItem(KEY)); } catch (e) { S = null; }
+  const METAS_PADRAO = { kcal: 2400, proteina_g: 170, gordura_g: 150, carboidrato_g: 120, fibra_g: 30 };
+  const arr = x => Array.isArray(x) ? x : [];
+  // Garante que todo estado (salvo, importado ou antigo) tenha o formato que o app espera
+  function normalizar(s) {
+    if (!s || typeof s !== 'object' || s.v !== 2) return null;
+    s.metas = { ...METAS_PADRAO, ...(s.metas && typeof s.metas === 'object' ? s.metas : {}) };
+    s.dias = s.dias && typeof s.dias === 'object' && !Array.isArray(s.dias) ? s.dias : {};
+    for (const [iso, d] of Object.entries(s.dias)) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(iso) || !d || typeof d !== 'object') { delete s.dias[iso]; continue; }
+      d.refeicoes = arr(d.refeicoes).filter(r => r && typeof r === 'object').map(r => ({ ...r, id: r.id || uid(), itens: arr(r.itens).filter(it => it && it.a && +it.g >= 0) }));
+      d.rotina = arr(d.rotina).filter(r => r && TIPOS_ROT[r.tipo]).map(r => ({ ...r, id: r.id || uid() }));
+      d.liquidos = arr(d.liquidos).filter(l => l && l.a).map(l => ({ ...l, id: l.id || uid() }));
+    }
+    s.jejuns = arr(s.jejuns).filter(j => j && isFinite(j.inicio) && isFinite(j.fimPrev) && j.fimPrev > j.inicio).map(j => ({ ...j, id: j.id || uid(), fim: isFinite(j.fim) && j.fim ? j.fim : null }));
+    s.dietas = arr(s.dietas).filter(d => d && d.id && Array.isArray(d.dias) && d.dias.length === 7);
+    s.custom = arr(s.custom).filter(f => f && f.id && f.nome);
+    s.favs = [...new Set(arr(s.favs))];
+    s.pesos = arr(s.pesos).filter(p => p && /^\d{4}-\d{2}-\d{2}$/.test(p.d) && +p.kg > 0).sort((a, b) => a.d.localeCompare(b.d));
+    s.refsSalvas = arr(s.refsSalvas).filter(r => r && r.id && Array.isArray(r.itens));
+    s.compras = s.compras && typeof s.compras === 'object' ? s.compras : {};
+    if (!s.criado) s.criado = Date.now();
+    return s;
+  }
+  try { S = normalizar(JSON.parse(localStorage.getItem(KEY))); } catch (e) { S = null; }
   let novoEstado = false;
-  if (!S || S.v !== 2) { S = estadoInicial(); novoEstado = true; }
-  S.favs = S.favs || [];
+  if (!S) { S = normalizar(estadoInicial()); novoEstado = true; }
   const ehFav = id => S.favs.includes(id);
-  const salvar = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* armazenamento indisponível */ } };
+  let avisouErro = false;
+  const salvar = () => {
+    try { localStorage.setItem(KEY, JSON.stringify(S)); avisouErro = false; }
+    catch (e) { if (!avisouErro) { avisouErro = true; setTimeout(() => toast('Não foi possível salvar neste aparelho. Exporte um backup em Metas e dados.'), 0); } }
+  };
+  // Pede ao navegador para não apagar os dados sozinho (Safari apaga sites sem uso)
+  try { navigator.storage?.persist?.(); } catch (e) { /* sem suporte */ }
 
-  const alimentos = () => [...DB.alimentos, ...S.custom];
-  const FOOD = id => alimentos().find(f => f.id === id);
+  // Alimentos ocultos (apagados mas ainda usados em refeições) continuam nos cálculos, mas saem das listas
+  const alimentos = () => [...DB.alimentos, ...S.custom.filter(f => !f.oculto)];
+  const FOOD = id => DBMAP.get(id) || S.custom.find(f => f.id === id);
   const diaDe = iso => S.dias[iso] || { refeicoes: [], rotina: [], liquidos: [] };
   const diaEdit = iso => { const d = (S.dias[iso] = S.dias[iso] || { refeicoes: [], rotina: [] }); d.liquidos = d.liquidos || []; return d; };
   const liqsDe = iso => diaDe(iso).liquidos || [];
@@ -188,14 +228,32 @@
   const totalDia = (iso, soFeito) => soma([...diaDe(iso).refeicoes.filter(r => !soFeito || r.feito).flatMap(r => r.itens), ...liqsDe(iso).filter(l => !soFeito || l.feito)]);
   const minutos = (iso, tipo, soFeito) => diaDe(iso).rotina.filter(r => r.tipo === tipo && (!soFeito || r.feito)).reduce((s, r) => s + (+r.min || 0), 0);
   const pct = (v, ref) => ref ? Math.round(v / ref * 100) : 0;
-  const fimJ = j => j.fim || j.fimPrev;
-  const jejumAtivo = () => S.jejuns.find(j => !j.fim && j.inicio <= Date.now());
+  // Fim do jejum: o real se já terminou; se está em andamento e passou da meta, vai até agora
+  const fimJ = j => j.fim || (j.inicio <= Date.now() ? Math.max(Date.now(), j.fimPrev) : j.fimPrev);
+  const jejumAtivo = () => S.jejuns.filter(j => !j.fim && j.inicio <= Date.now()).sort((a, b) => b.inicio - a.inicio)[0];
   const proxJejum = () => S.jejuns.filter(j => j.inicio > Date.now()).sort((a, b) => a.inicio - b.inicio)[0];
-  const jejunsDoDia = iso => { const a = dataDe(iso).getTime(), b = a + DIA_MS; return S.jejuns.filter(j => j.inicio < b && fimJ(j) > a); };
-  const horasJejumDia = iso => { const a = dataDe(iso).getTime(), b = a + DIA_MS; return jejunsDoDia(iso).reduce((s, j) => s + (Math.min(b, j.fim || (j.inicio <= Date.now() && !j.fim ? Math.min(Date.now(), j.fimPrev) : j.fimPrev)) - Math.max(a, j.inicio)) / H, 0); };
+  const jejunsDoDia = iso => { const a = dataDe(iso).getTime(), b = a + DIA_MS; return S.jejuns.filter(j => j.inicio < b && fimJ(j) > a).sort((x, y) => x.inicio - y.inicio); };
+  // Horas de jejum no dia. soFeito: só o que já aconteceu (até agora)
+  const horasJejumDia = (iso, soFeito) => { const a = dataDe(iso).getTime(), b = a + DIA_MS, now = Date.now();
+    return jejunsDoDia(iso).reduce((s, j) => { const fim = Math.min(b, soFeito ? Math.min(now, fimJ(j)) : fimJ(j)), ini = Math.max(a, j.inicio); return s + Math.max(0, fim - ini) / H; }, 0); };
+  const sobrepoe = (ini, fim, exceto) => S.jejuns.find(j => j.id !== exceto && j.inicio < fim && fimJ(j) > ini);
+  // Momento de uma refeição (dia + hora); sem hora conta como meio-dia
+  const tsRef = (iso, hora) => { const d = dataDe(iso); const [h, m] = (hora || '12:00').split(':').map(Number); d.setHours(h || 0, m || 0, 0, 0); return d.getTime(); };
+  const hhmm = ts => { const d = new Date(ts); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
+  // Fases aproximadas do jejum (variam de pessoa para pessoa)
+  const FASES = [
+    [0, 'Digestão', 'O corpo ainda usa a última refeição.'],
+    [4, 'Glicose em queda', 'A insulina baixa e o corpo começa a usar as reservas.'],
+    [12, 'Início da cetose', 'O glicogênio do fígado acaba e a gordura vira a principal fonte de energia.'],
+    [18, 'Cetose', 'Mais cetonas no sangue. A fome costuma diminuir.'],
+    [24, 'Autofagia em alta', 'Renovação celular mais intensa. Mantenha a água com sal.'],
+    [48, 'Cetose profunda', 'Hormônio do crescimento mais alto. Reponha sódio, potássio e magnésio.'],
+    [72, 'Jejum prolongado', 'Atenção a tontura e fraqueza. Tenha acompanhamento médico.'],
+  ];
+  const faseDe = h => { let k = 0; FASES.forEach((f, i) => { if (h >= f[0]) k = i; }); return { k, f: FASES[k], prox: FASES[k + 1] }; };
   const aguaSal = receitaComoAlimento({ id: 'agua-sal', nome: 'Água com sal integral', itens: [{ a: 'agua', g: 1000 }, { a: 'sal-marinho', g: 2 }] });
   Object.assign(aguaSal, { categoria: 'bebidas', un: 1000, unNome: 'litro', img: DB.alimentos.find(f => f.id === 'agua')?.img, fonte: '1 litro de água com 2 g de sal marinho integral', beneficio: 'Para beber ao longo dos dias de jejum. Repõe sódio.' });
-  if (!DB.alimentos.some(f => f.id === 'agua-sal')) DB.alimentos.push(aguaSal);
+  if (!DBMAP.has('agua-sal')) { DB.alimentos.push(aguaSal); DBMAP.set('agua-sal', aguaSal); }
   if (!S.migLiq) {
     const tira = d => { d.liquidos = d.liquidos || [];
       d.refeicoes = d.refeicoes.filter(r => { const liq = r.itens.filter(it => ehLiquido(FOOD(it.a))); if (!liq.length) return true;
@@ -204,19 +262,67 @@
     S.jejuns.filter(j => !j.fim).forEach(j => garantirAguaSal(j));
     S.migLiq = true; novoEstado = true;
   }
+  if (!S.migJejum) {
+    // Liga pré-jejum e quebra aos jejuns e marca a água com sal colocada pelo app
+    S.jejuns.forEach(j => ligarRefsJejum(j));
+    Object.values(S.dias).forEach(d => d.liquidos.forEach(l => { if (l.a === 'agua-sal' && !l.hora && l.g === 2000) l.auto = true; }));
+    S.migJejum = true; novoEstado = true;
+  }
   const iconeDe = r => FOOD([...r.itens].sort((x, y) => (valor(FOOD(y.a), 'kcal') * y.g) - (valor(FOOD(x.a), 'kcal') * x.g))[0]?.a);
 
   // Água com sal integral em todo dia com pelo menos 12 h de jejum
+  function horasCobertas(iso, s = S, j0) { const a = dataDe(iso).getTime(), b = a + DIA_MS;
+    return [...s.jejuns, ...(j0 && !s.jejuns.includes(j0) ? [j0] : [])].reduce((t, j) => t + Math.max(0, Math.min(b, j.fim || j.fimPrev) - Math.max(a, j.inicio)) / H, 0); }
   function garantirAguaSal(j, s = S) {
     const fim = j.fim || j.fimPrev;
     for (let d = dataDe(isoDe(new Date(j.inicio))); d.getTime() < fim; d = somaDias(d, 1)) {
-      const a = d.getTime(), h = (Math.min(a + DIA_MS, fim) - Math.max(a, j.inicio)) / H;
-      if (h < 12) continue;
-      const iso = isoDe(d), dia = s.dias[iso] = s.dias[iso] || { refeicoes: [], rotina: [] };
+      const iso = isoDe(d);
+      if (horasCobertas(iso, s, j) < 12) continue;
+      const dia = s.dias[iso] = s.dias[iso] || { refeicoes: [], rotina: [] };
       dia.liquidos = dia.liquidos || [];
-      if (!dia.liquidos.some(l => l.a === 'agua-sal')) dia.liquidos.unshift({ id: uid(), a: 'agua-sal', g: 2000, hora: '', feito: false });
+      if (!dia.liquidos.some(l => l.a === 'agua-sal')) dia.liquidos.unshift({ id: uid(), a: 'agua-sal', g: 2000, hora: '', feito: false, auto: true });
     }
   }
+  // Tira a água com sal que o app colocou em dias que não têm mais 12 h de jejum (se ainda não foi bebida)
+  function limparAguaSal(s = S) {
+    for (const [iso, d] of Object.entries(s.dias)) {
+      if (!d.liquidos?.some(l => l.auto && !l.feito)) continue;
+      if (horasCobertas(iso, s) >= 12) continue;
+      d.liquidos = d.liquidos.filter(l => !(l.auto && !l.feito));
+    }
+  }
+  // Pré-jejum e quebra ligados a um jejum: acha pelo id, ou pelo nome no dia do começo e do fim
+  function ligarRefsJejum(j, s = S) {
+    const ini = s.dias[isoDe(new Date(j.inicio))], fim = s.dias[isoDe(new Date(j.fimPrev))];
+    const pre = ini?.refeicoes.find(r => r.nome === 'Pré-jejum' && !r.jejum), qb = fim?.refeicoes.find(r => r.nome === 'Quebra do jejum' && !r.jejum);
+    if (pre) pre.jejum = j.id;
+    if (qb) qb.jejum = j.id;
+  }
+  const refsDoJejum = j => Object.entries(S.dias).flatMap(([iso, d]) => d.refeicoes.filter(r => r.jejum === j.id).map(r => ({ iso, r })));
+  // Move uma refeição para outro dia e hora
+  function moverRef(deIso, r, ts) {
+    const de = S.dias[deIso]; if (de) de.refeicoes = de.refeicoes.filter(x => x !== r);
+    r.hora = hhmm(ts); diaEdit(isoDe(new Date(ts))).refeicoes.push(r);
+  }
+  // Depois de criar, mudar ou encerrar um jejum: pré-jejum 1 h antes do começo, quebra no fim, água com sal nos dias certos
+  function sincronizarJejum(j) {
+    for (const { iso, r } of refsDoJejum(j)) {
+      if (r.feito) continue;
+      if (r.nome === 'Pré-jejum') moverRef(iso, r, j.inicio - H);
+      else if (r.nome === 'Quebra do jejum') moverRef(iso, r, j.fim || j.fimPrev);
+    }
+    garantirAguaSal(j); limparAguaSal();
+  }
+  // Refeições ainda não comidas que caem dentro do jejum (fora pré-jejum e quebra)
+  function refsNoJejum(j) {
+    const out = [], fim = j.fim || j.fimPrev;
+    for (let d = dataDe(isoDe(new Date(j.inicio))); d.getTime() < fim; d = somaDias(d, 1)) {
+      const iso = isoDe(d);
+      (S.dias[iso]?.refeicoes || []).forEach(r => { const t = tsRef(iso, r.hora); if (!r.feito && !r.jejum && r.itens.length && t > j.inicio + 60e3 && t < fim - 60e3) out.push({ iso, r }); });
+    }
+    return out;
+  }
+  const tirarRefs = L => L.forEach(({ iso, r }) => { const d = S.dias[iso]; if (d) d.refeicoes = d.refeicoes.filter(x => x !== r); });
   // Dietas com jejum começam no dia do pré-jejum, no dia da semana escolhido (diaIni) e na hora escolhida
   function inicioPadrao(dt) { return dt.jejum?.length ? (dt.diaInicio ?? dt.jejum[0].dia) : 0; }
   function aplicarDieta(dt, segunda, substituir, s = S, diaIni, horaIni) {
@@ -224,7 +330,7 @@
     const base = somaDias(segunda, w), j0 = dt.jejum?.[0], difH = temJ && horaIni ? (() => { const f = h => { const [a, b] = h.split(':').map(Number); return a + b / 60; }; return f(j0.hora) - f(horaIni); })() : 0;
     for (let k = 0; k < 7; k++) {
       const iso = isoDe(somaDias(base, k)), src = dt.dias[(off + k) % 7];
-      const novo = { refeicoes: src.refeicoes.map(r => ({ ...clone(r), id: uid(), feito: false })), rotina: src.rotina.map(r => ({ ...r, id: uid(), feito: false })), liquidos: (src.liquidos || []).map(l => ({ ...l, id: uid(), feito: false })) };
+      const novo = { refeicoes: src.refeicoes.map(r => { const c = { ...clone(r), id: uid(), feito: false }; delete c.jejum; return c; }), rotina: src.rotina.map(r => ({ ...r, id: uid(), feito: false })), liquidos: (src.liquidos || []).map(l => ({ ...l, id: uid(), feito: false })) };
       if (k === 0 && temJ && horaIni) novo.refeicoes.forEach(r => { if (r.nome === 'Pré-jejum') r.hora = horaMenos(horaIni, 1); });
       if (substituir || !s.dias[iso]) s.dias[iso] = novo;
       else { const d = s.dias[iso]; d.liquidos = d.liquidos || []; d.refeicoes.push(...novo.refeicoes); d.rotina.push(...novo.rotina); d.liquidos.push(...novo.liquidos); }
@@ -237,8 +343,9 @@
       let jj = s.jejuns.find(x => x.inicio === d.getTime());
       if (jj) { if (!jj.fim) jj.fimPrev = d.getTime() + horas * H; }
       else { jj = { id: uid(), inicio: d.getTime(), fimPrev: d.getTime() + horas * H, fim: null }; s.jejuns.push(jj); }
-      garantirAguaSal(jj, s);
+      garantirAguaSal(jj, s); ligarRefsJejum(jj, s);
     }
+    limparAguaSal(s);
   }
 
   // ---------- Componentes ----------
@@ -289,6 +396,7 @@
       ${AREAS.map(a => `<section class="group"><h3 class="label">${a.nome}</h3><div class="rows">${a.mods.map(m => `<a class="row-main solo ${m.id === atual ? 'cur' : ''}" href="#${m.rota}">${icone(m.id, 't-' + a.id)}<span class="row-t"><b>${m.nome}</b><small>${m.pronto ? 'Hoje, calendário, alimentos, dietas e resumo' : (m.desc ? m.desc + ' · ' : '') + 'Em breve'}</small></span>${m.id === atual ? ICO.check : ICO.seta}</a>`).join('')}</div></section>`).join('')}`);
   }
   function render() {
+    diaRender = hoje();
     const h = (location.hash || '').slice(1);
     if (/^dia-\d{4}-\d{2}-\d{2}$/.test(h)) { rota = 'dia'; diaRota = h.slice(4); }
     else rota = TABS.includes(h) || h === 'metas' || (MODS[h] && !MODS[h].pronto) ? h : 'hoje';
@@ -311,6 +419,9 @@
     const refs = [...d.refeicoes].sort((a, b) => (a.hora || '99').localeCompare(b.hora || '99'));
     const rot = [...d.rotina].sort((a, b) => (a.hora || '99').localeCompare(b.hora || '99'));
     const liqs = [...liqsDe(iso)].sort((a, b) => (a.hora || '').localeCompare(b.hora || ''));
+    const js = jejunsDoDia(iso), noJejum = r => !r.feito && !r.jejum && r.hora && js.some(j => { const t = tsRef(iso, r.hora); return t > j.inicio + 60e3 && t < fimJ(j) - 60e3; });
+    const peso = S.pesos.find(p => p.d === iso);
+    const lembrarBackup = ehHoje && Object.keys(S.dias).length > 3 && Date.now() - (S.ultimoBackup || S.criado || Date.now()) > 21 * DIA_MS;
     return `
     <header class="head">
       ${ehHoje ? '' : `<a class="back" href="#calendario" aria-label="Voltar ao calendário">${ICO.voltar}</a>`}
@@ -318,6 +429,7 @@
       <a class="icon-btn" href="#metas" aria-label="Metas e dados">${ICO.ajuste}</a>
     </header>
     ${cartaoJejum(iso, ehHoje)}
+    ${lembrarBackup ? `<a class="card-btn" href="#metas">${icone('ajuste')}<span class="row-t"><b>Faça um backup</b><small>${S.ultimoBackup ? 'O último foi há ' + Math.floor((Date.now() - S.ultimoBackup) / DIA_MS) + ' dias' : 'Os dados ficam só neste aparelho'}</small></span>${ICO.seta}</a>` : ''}
     <button class="daybars" data-act="nutrientes" data-iso="${iso}" aria-label="Ver nutrientes do dia">
       <span class="db-h"><span class="label">${iso === hoje() ? 'Comido hoje' : passado ? 'Comido no dia' : 'Metas do dia'}</span><span class="go">Detalhes ${ICO.seta}</span></span>
       ${barrasDia(iso, t, feito)}
@@ -327,9 +439,9 @@
       <h2 class="label">Refeições</h2>
       ${refs.length ? `<div class="rows">${refs.map(r => { const tt = soma(r.itens);
         return `<div class="row-item ${r.feito ? 'done' : ''}">
-          <button class="row-main" data-act="abrirRef" data-iso="${iso}" data-id="${r.id}">${foto(iconeDe(r))}<span class="row-t"><b>${esc(r.nome)}</b><small>${esc(r.hora || '')}${r.hora ? ' · ' : ''}${fmt(tt.kcal, 0)} kcal · ${r.itens.length} ${r.itens.length === 1 ? 'item' : 'itens'}</small></span></button>
+          <button class="row-main" data-act="abrirRef" data-iso="${iso}" data-id="${r.id}">${foto(iconeDe(r))}<span class="row-t"><b>${esc(r.nome)}${noJejum(r) ? ' <span class="badge">no jejum</span>' : ''}</b><small>${esc(r.hora || '')}${r.hora ? ' · ' : ''}${fmt(tt.kcal, 0)} kcal · ${r.itens.length} ${r.itens.length === 1 ? 'item' : 'itens'}</small></span></button>
           <button class="tick" data-act="feitoRef" data-iso="${iso}" data-id="${r.id}" aria-pressed="${r.feito}" aria-label="${r.feito ? 'Desmarcar' : 'Marcar como comida'}">${ICO.check}</button></div>`; }).join('')}</div>`
-        : `<p class="empty">${jejunsDoDia(iso).length ? 'Dia de jejum, sem refeições.' : 'Nenhuma refeição.'}</p>`}
+        : `<p class="empty">${js.length ? 'Dia de jejum, sem refeições.' : 'Nenhuma refeição.'}</p>`}
     </section>
     <section class="group">
       <h2 class="label">Líquidos</h2>
@@ -345,55 +457,69 @@
           <button class="row-main" data-act="abrirRot" data-iso="${iso}" data-id="${r.id}">${icone(r.tipo, 't-' + r.tipo)}<span class="row-t"><b>${TIPOS_ROT[r.tipo]} · ${r.min} min</b><small>${esc([r.hora, r.nota].filter(Boolean).join(' · '))}</small></span></button>
           <button class="tick" data-act="feitoRot" data-iso="${iso}" data-id="${r.id}" aria-pressed="${r.feito}" aria-label="${r.feito ? 'Desmarcar' : 'Marcar como feito'}">${ICO.check}</button></div>`).join('')}</div>`
         : '<p class="empty">Sem sol ou treino.</p>'}
+      ${peso ? `<button class="row-main solo" data-act="addPeso" data-iso="${iso}">${icone('balanca', 't-peso')}<span class="row-t"><b>Peso · ${fmt(peso.kg, 1)} kg</b><small>${variacaoPeso(iso)}</small></span>${ICO.seta}</button>` : ''}
     </section>
+    <div class="row wrap day-tools"><button class="btn ghost sm" data-act="copiarDia" data-iso="${iso}">Copiar este dia</button>${peso ? '' : `<button class="btn ghost sm" data-act="addPeso" data-iso="${iso}">Registrar peso</button>`}</div>
     <div class="fab-space"></div>`;
   }
 
+  const ultimoJejum = () => S.jejuns.filter(j => j.fim).sort((a, b) => b.fim - a.fim)[0];
   function cartaoJejum(iso, ehHoje) {
     const ativo = jejumAtivo(), prox = proxJejum();
-    let j = ehHoje ? (ativo || (prox && prox.inicio - Date.now() < 2 * DIA_MS ? prox : null)) : jejunsDoDia(iso)[0];
+    const j = ehHoje ? (ativo || (prox && prox.inicio - Date.now() < 2 * DIA_MS ? prox : null)) : jejunsDoDia(iso)[0];
     if (!j) {
       if (!ehHoje) return '';
+      const u = ultimoJejum();
       return `<section class="fast idle"><div class="fast-row"><button class="play" data-act="comecarJejum" aria-label="Começar jejum agora">${ICO.play}</button>
-        <div class="fast-t"><b>Começar jejum agora</b><small>Ou planeje um para depois</small></div><button class="pill" data-act="planejarJejum">Planejar</button></div></section>`;
+        <div class="fast-t"><b>Começar jejum agora</b><small>${u ? `Último: ${duracao((u.fim - u.inicio) / H)}, terminou ${quando(u.fim)}` : 'Ou planeje um para depois'}</small></div><button class="pill" data-act="planejarJejum">Planejar</button></div></section>`;
     }
     const now = Date.now(), total = (j.fimPrev - j.inicio) / H;
     const estado = j.fim ? 'feito' : j.inicio > now ? 'futuro' : 'ativo';
     const decorrido = estado === 'ativo' ? (now - j.inicio) / H : estado === 'feito' ? (j.fim - j.inicio) / H : 0;
+    const passou = estado === 'ativo' && now >= j.fimPrev;
     const p = Math.min(1, decorrido / total), R = 52, C = 2 * Math.PI * R;
-    const titulo = { futuro: 'Próximo jejum', ativo: 'Jejum em andamento', feito: 'Jejum concluído' }[estado];
-    return `<section class="fast ${estado}" data-jejum="${j.id}">
-      <div class="fast-title">${icone('jejum', 't-fast')}<span><b>${titulo}</b><small>${fmt(total, 0)} h${total >= 24 ? ` (${fmt(total / 24, 1)} ${total >= 48 ? 'dias' : 'dia'})` : ''} sem comer</small></span></div>
+    const titulo = passou ? 'Meta do jejum atingida' : { futuro: 'Próximo jejum', ativo: 'Jejum em andamento', feito: 'Jejum concluído' }[estado];
+    const fz = estado === 'futuro' ? null : faseDe(decorrido);
+    return `<section class="fast ${estado} ${passou ? 'meta' : ''}" data-jejum="${j.id}" data-estado="${estado}${passou ? '-meta' : ''}">
+      <div class="fast-title">${icone('jejum', 't-fast')}<span><b>${titulo}</b><small>meta de ${fmt(total, 0)} h${total >= 24 ? ` (${fmt(total / 24, 1)} ${total >= 48 ? 'dias' : 'dia'})` : ''}</small></span></div>
       <div class="fast-ring">
         <svg viewBox="0 0 120 120" aria-hidden="true"><defs><linearGradient id="gr" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="var(--red)"/><stop offset="1" stop-color="var(--orange)"/></linearGradient></defs>
           <circle cx="60" cy="60" r="${R}" class="ring-bg"/><circle cx="60" cy="60" r="${R}" class="ring-fg" stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - p)}" id="ringFg" data-c="${C}"/></svg>
-        <div class="ring-c">${estado === 'futuro' ? `<small>o jejum começa em</small><b id="jTempo">${duracao((j.inicio - now) / H)}</b>` : estado === 'feito' ? `<small>você jejuou</small><b>${duracao(decorrido)}</b>` : `<small>em jejum há</small><b id="jTempo">${duracao(decorrido)}</b>`}</div>
+        <div class="ring-c">${estado === 'futuro' ? `<small>começa em</small><b id="jTempo">${duracao((j.inicio - now) / H)}</b>` : estado === 'feito' ? `<small>você jejuou</small><b>${duracao(decorrido)}</b>` : `<small>em jejum há</small><b id="jTempo">${duracao(decorrido)}</b>`}</div>
       </div>
+      ${fz ? `<button class="phase" data-act="fases" data-h="${decorrido}"><span class="phase-k">${fz.k + 1}/${FASES.length}</span><span class="row-t"><b id="jFase">${fz.f[1]}</b><small id="jFaseD">${estado === 'feito' ? 'Fase alcançada' : fz.prox ? `Próxima: ${fz.prox[1].toLowerCase()} em ${duracao(fz.prox[0] - decorrido)}` : fz.f[2]}</small></span>${ICO.seta}</button>` : ''}
       <div class="fast-info">
         <div><small>Começo</small><b>${quando(j.inicio)}</b></div>
-        <div><small>${estado === 'feito' ? 'Terminou' : 'Fim previsto'}</small><b>${quando(fimJ(j))}</b></div>
-        <div><small>${estado === 'ativo' ? 'Faltam' : estado === 'feito' ? 'Meta' : 'Duração'}</small><b id="jFalta">${estado === 'ativo' ? duracao((j.fimPrev - now) / H) : fmt(total, 0) + ' h'}</b></div>
+        <div><small>${estado === 'feito' ? 'Terminou' : 'Fim previsto'}</small><b>${quando(j.fim || j.fimPrev)}</b></div>
+        <div><small>${passou ? 'Além da meta' : estado === 'ativo' ? 'Faltam' : estado === 'feito' ? 'Meta' : 'Duração'}</small><b id="jFalta">${estado === 'ativo' ? duracao(Math.abs(j.fimPrev - now) / H) : fmt(total, 0) + ' h'}</b></div>
       </div>
       <div class="fast-act">
-        ${estado === 'ativo' ? `<button class="btn ghost" data-act="encerrarJejum" data-id="${j.id}">${ICO.stop} Encerrar</button>` : ''}
+        ${estado === 'ativo' ? `<button class="btn ${passou ? '' : 'ghost'}" data-act="encerrarJejum" data-id="${j.id}">${ICO.stop} Encerrar</button>` : ''}
+        ${estado === 'futuro' ? `<button class="btn ghost" data-act="comecarAgora" data-id="${j.id}">${ICO.play} Começar agora</button>` : ''}
         <button class="btn ghost" data-act="editarJejum" data-id="${j.id}">Editar</button>
       </div>
     </section>`;
   }
-  let timer;
+  // Atualiza o cartão do jejum e troca de dia à meia-noite
+  let timer, diaRender = hoje();
   function tick() {
     clearInterval(timer);
     const upd = () => {
-      const el = $('[data-jejum]'); if (!el) return clearInterval(timer);
+      if (hoje() !== diaRender) return render();
+      const el = $('[data-jejum]'); if (!el) return;
       const j = S.jejuns.find(x => x.id === el.dataset.jejum); if (!j || j.fim) return;
       const now = Date.now(), total = (j.fimPrev - j.inicio) / H;
-      if (j.inicio > now) { $('#jTempo') && ($('#jTempo').textContent = duracao((j.inicio - now) / H)); return; }
-      const dec = (now - j.inicio) / H;
+      const est = j.inicio > now ? 'futuro' : now >= j.fimPrev ? 'ativo-meta' : 'ativo';
+      if (est !== el.dataset.estado) return render();
+      if (est === 'futuro') { $('#jTempo') && ($('#jTempo').textContent = duracao((j.inicio - now) / H)); return; }
+      const dec = (now - j.inicio) / H, fz = faseDe(dec);
       $('#jTempo') && ($('#jTempo').textContent = duracao(dec));
-      $('#jFalta') && ($('#jFalta').textContent = duracao((j.fimPrev - now) / H));
+      $('#jFalta') && ($('#jFalta').textContent = duracao(Math.abs(j.fimPrev - now) / H));
+      $('#jFase') && ($('#jFase').textContent = fz.f[1]);
+      $('#jFaseD') && ($('#jFaseD').textContent = fz.prox ? `Próxima: ${fz.prox[1].toLowerCase()} em ${duracao(fz.prox[0] - dec)}` : fz.f[2]);
       const r = $('#ringFg'); if (r) r.setAttribute('stroke-dashoffset', r.dataset.c * (1 - Math.min(1, dec / total)));
     };
-    upd(); timer = setInterval(upd, 20000);
+    upd(); timer = setInterval(upd, 15000);
   }
 
   // ----- Calendário -----
@@ -418,13 +544,21 @@
     </div>
     ${calSel ? `<div class="selbar"><span class="row-t"><b>${calSel.size ? `${calSel.size} ${calSel.size === 1 ? 'dia selecionado' : 'dias selecionados'}` : 'Toque nos dias'}</b><small>Apaga refeições, rotina e jejuns que começam nesses dias</small></span><div class="row"><button class="btn ghost grow" data-act="calSel">Cancelar</button><button class="btn grow" data-act="apagarDias" ${calSel.size ? '' : 'disabled'}>${ICO.lixo} Apagar</button></div></div>` : `
     <div class="legend"><span><i class="d-ref"></i>Refeição</span><span><i class="d-sol"></i>Sol</span><span><i class="d-treino"></i>Treino</span><span><i class="d-fast"></i>Jejum</span></div>
-    ${jj ? `<button class="card-btn" data-act="editarJejum" data-id="${jj.id}">${icone('jejum', 't-fast')}<span class="row-t"><b>${ativo ? 'Em jejum' : 'Próximo jejum'}</b><small>${quando(jj.inicio)} até ${quando(jj.fimPrev)} · ${fmt((jj.fimPrev - jj.inicio) / H, 0)} h</small></span>${ICO.seta}</button>` : ''}
+    ${jj ? `<button class="card-btn" data-act="editarJejum" data-id="${jj.id}">${icone('jejum', 't-fast')}<span class="row-t"><b>${ativo ? `Em jejum há ${duracao((Date.now() - jj.inicio) / H)}` : 'Próximo jejum'}</b><small>${ativo ? `Desde ${quando(jj.inicio)} · meta de ${fmt((jj.fimPrev - jj.inicio) / H, 0)} h` : `${quando(jj.inicio)} até ${quando(jj.fimPrev)} · ${fmt((jj.fimPrev - jj.inicio) / H, 0)} h`}</small></span>${ICO.seta}</button>` : ''}
+    <button class="card-btn" data-act="compras">${icone('lista')}<span class="row-t"><b>Lista de compras</b><small>Tudo o que está planejado no calendário</small></span>${ICO.seta}</button>
     <div class="row wrap"><button class="btn" data-act="planejarJejum">Planejar jejum</button><a class="btn ghost" href="#dia-${hoje()}">Ir para hoje</a><button class="btn ghost" data-act="calSel">Selecionar dias</button></div>`}`;
   }
 
   // ----- Alimentos -----
   const filtro = { q: '', cat: S.favs.length ? 'fav' : '', ord: 'proteina_g', base: 'g' };
-  const chipsCat = act => [['fav', '★ Favoritos'], ['', 'Todos'], ...Object.entries(CATS)].map(([k, n]) => `<button class="chip ${(act === 'catP' ? filtro.catP : filtro.cat) === k ? 'on' : ''} ${k === 'fav' ? 'fav' : ''}" data-act="${act}" data-c="${k}">${n.split(',')[0]}</button>`).join('');
+  // Alimentos usados nos últimos 30 dias, do mais recente para o mais antigo
+  function recentes() {
+    const ids = [];
+    for (let k = 0; k <= 30; k++) { const d = diaDe(isoDe(somaDias(new Date(), -k)));
+      [...d.refeicoes].sort((a, b) => (b.hora || '').localeCompare(a.hora || '')).forEach(r => r.itens.forEach(it => ids.push(it.a))); (d.liquidos || []).forEach(l => ids.push(l.a)); }
+    return [...new Set(ids)].filter(id => FOOD(id) && !FOOD(id).oculto).slice(0, 24);
+  }
+  const chipsCat = act => [['fav', '★ Favoritos'], ...(act === 'catP' && recentes().length ? [['rec', 'Recentes']] : []), ['', 'Todos'], ...Object.entries(CATS).filter(([k]) => !(act === 'catP' && k === 'bebidas' && !ctx.receita))].map(([k, n]) => `<button class="chip ${(act === 'catP' ? filtro.catP : filtro.cat) === k ? 'on' : ''} ${k === 'fav' ? 'fav' : ''}" data-act="${act}" data-c="${k}">${n.split(',')[0]}</button>`).join('');
   function vAlimentos() {
     return `
     <header class="head"><div class="head-t"><p class="eyebrow">${alimentos().length} alimentos · por 100 g</p><h1>Alimentos</h1></div></header>
@@ -442,16 +576,22 @@
     const q = semAcento((picker ? filtro.qP : filtro.q) || '').trim(), k = filtro.ord;
     const modo = picker ? (ctx.liq ? 'liq' : ctx.receita ? 'todos' : 'ref') : 'todos';
     const cat = modo === 'liq' ? '' : picker ? filtro.catP : filtro.cat;
-    const L = alimentos().filter(f => (modo === 'todos' || (modo === 'liq') === ehLiquido(f)) && (!cat || (cat === 'fav' ? ehFav(f.id) : f.categoria === cat)) && (!q || semAcento(f.nome).includes(q)))
-      .map(f => ({ f, s: filtro.base === 'kcal' ? (f.kcal ? valor(f, k) / f.kcal * 100 : 0) : valor(f, k) })).sort((a, b) => b.s - a.s);
+    const rec = cat === 'rec' ? recentes() : null;
+    const L = alimentos().filter(f => (modo === 'todos' || (modo === 'liq') === ehLiquido(f)) && (!cat || (cat === 'fav' ? ehFav(f.id) : cat === 'rec' ? rec.includes(f.id) : f.categoria === cat)) && (!q || semAcento(f.nome).includes(q)))
+      .map(f => ({ f, s: filtro.base === 'kcal' ? (f.kcal ? valor(f, k) / f.kcal * 100 : 0) : valor(f, k) })).sort((a, b) => rec ? rec.indexOf(a.f.id) - rec.indexOf(b.f.id) : b.s - a.s);
     const maior = f => ['proteina_g', 'gordura_g', 'carboidrato_g', 'fibra_g'].map(n => [n, f[n] || 0]).sort((a, b) => b[1] - a[1])[0];
     const extra = (f, s) => MACROS.some(m => m.k === k) || !s ? '' : ` <i>|</i> ${esc(NUT[k].n.split(' (')[0])} ${fmt(s)} ${NUT[k].u}`;
+    if (!L.length && cat === 'rec') return '<p class="empty">Nada usado nos últimos 30 dias.</p>';
     if (!L.length) return cat === 'fav' && !q ? '<p class="empty">Nenhum favorito ainda. Abra um alimento e toque na estrela para guardar os que você mais usa.</p>' : '<p class="empty">Nenhum alimento encontrado.</p>';
     return `<div class="rows foods">${L.map(({ f, s }) => `<div class="food"><button class="food-main" data-act="${picker ? 'escolher' : 'verAlimento'}" data-a="${esc(f.id)}">
       ${foto(f)}<span class="row-t"><b>${esc(f.nome)}</b><small>${esc((CATS[f.categoria] || '').split(',')[0])} <i>|</i> ${fmt(f.kcal, 0)} kcal${extra(f, s)}</small></span>
       ${(([n, v]) => v >= 0.5 ? `<span class="fv"><small>${NUT[n].n}</small><b>${fmt(v)} g</b></span>` : '<span class="fv"><small>–</small></span>')(maior(f))}${picker ? `<span class="add">${ICO.mais}</span>` : ''}</button>
       ${picker ? '' : `<button class="fav-btn ${ehFav(f.id) ? 'on' : ''}" data-act="fav" data-a="${esc(f.id)}" aria-pressed="${ehFav(f.id)}" aria-label="${ehFav(f.id) ? 'Tirar dos favoritos' : 'Favoritar'} ${esc(f.nome)}">${ICO.estrela}</button>`}</div>`).join('')}</div>`;
   }
+
+  // Linha de uma refeição pronta (do app ou salva por você)
+  const linhaModelo = (k, act, iso, ic = ICO.seta) => { const r = ref(k), t = soma(r.itens);
+    return `<button class="row-main solo" data-act="${act}" data-k="${esc(k)}" ${iso ? `data-iso="${iso}"` : ''}>${foto(iconeDe(r))}<span class="row-t"><b>${esc(tituloModelo(k))}</b><small>${fmt(t.kcal, 0)} kcal · ${fmt(t.proteina_g, 0)} g prot · ${fmt(t.gordura_g, 0)} g gord</small></span>${ic}</button>`; };
 
   // ----- Dietas -----
   function mediaDieta(dt) {
@@ -473,16 +613,17 @@
     <section class="group"><h2 class="label">Minhas</h2>
       ${S.dietas.length ? `<div class="stack">${S.dietas.map(d => cardDieta(d, true)).join('')}</div>` : '<p class="empty">Monte uma semana no calendário e salve aqui para repetir depois.</p>'}
       <button class="btn ghost" data-act="salvarSemana">Salvar uma semana do calendário</button></section>
+    <section class="group"><h2 class="label">Minhas refeições</h2>
+      ${S.refsSalvas.length ? `<div class="rows">${S.refsSalvas.map(r => linhaModelo(r.id, 'verModelo')).join('')}</div>` : '<p class="empty">Abra uma refeição do dia e toque em "Salvar como pronta" para reutilizar depois.</p>'}</section>
     <section class="group"><h2 class="label">Refeições prontas</h2>
-      <div class="rows">${Object.keys(MODELOS).map(k => { const r = ref(k), t = soma(r.itens);
-        return `<button class="row-main solo" data-act="verModelo" data-k="${k}">${foto(iconeDe(r))}<span class="row-t"><b>${esc(MODELOS[k][3])}</b><small>${fmt(t.kcal, 0)} kcal · ${fmt(t.proteina_g, 0)} g prot · ${fmt(t.gordura_g, 0)} g gord</small></span>${ICO.seta}</button>`; }).join('')}</div></section>`;
+      <div class="rows">${Object.keys(MODELOS).map(k => linhaModelo(k, 'verModelo')).join('')}</div></section>`;
   }
 
   // ----- Resumo -----
   let semRes = inicioSemana(new Date()), nutRes = 'proteina_g', soFeito = false;
   function vResumo() {
     const dias = Array.from({ length: 7 }, (_, k) => isoDe(somaDias(semRes, k)));
-    const L = dias.map(iso => ({ iso, t: totalDia(iso, soFeito), sol: minutos(iso, 'sol', soFeito), tr: minutos(iso, 'treino', soFeito), j: horasJejumDia(iso) }));
+    const L = dias.map(iso => ({ iso, t: totalDia(iso, soFeito), sol: minutos(iso, 'sol', soFeito), tr: minutos(iso, 'treino', soFeito), j: horasJejumDia(iso, soFeito) }));
     const T = Object.fromEntries(NUTS.map(n => [n.k, L.reduce((s, l) => s + l.t[n.k], 0)]));
     const meta = S.metas[nutRes] ?? REFS[nutRes]?.ref ?? 0, max = Math.max(meta, ...L.map(l => l.t[nutRes]), 1), n = NUT[nutRes];
     const fimSem = somaDias(semRes, 6);
@@ -504,7 +645,10 @@
       </div>
       <p class="muted small">Total na semana: ${fmt(T[nutRes])} ${n.u}. Toque num dia para abrir.</p>
     </section>
-    <button class="card-btn" data-act="microsSemana">${icone('prato')}<span class="row-t"><b>Vitaminas e minerais da semana</b><small>% da referência para 7 dias</small></span>${ICO.seta}</button>`;
+    <button class="card-btn" data-act="microsSemana">${icone('prato')}<span class="row-t"><b>Vitaminas e minerais da semana</b><small>% da referência para 7 dias</small></span>${ICO.seta}</button>
+    ${painelPeso()}
+    <button class="card-btn" data-act="historicoJejum">${icone('historico')}<span class="row-t"><b>Histórico de jejuns</b><small>${(() => { const f = S.jejuns.filter(j => j.fim); return f.length ? `${f.length} ${f.length === 1 ? 'jejum feito' : 'jejuns feitos'} · o mais longo: ${duracao(Math.max(...f.map(j => (j.fim - j.inicio) / H)))}` : 'Nenhum jejum concluído ainda'; })()}</small></span>${ICO.seta}</button>
+    <button class="card-btn" data-act="compras" data-sem="${isoDe(semRes)}">${icone('lista')}<span class="row-t"><b>Lista de compras desta semana</b><small>${semRes.getDate()}/${semRes.getMonth() + 1} – ${fimSem.getDate()}/${fimSem.getMonth() + 1}</small></span>${ICO.seta}</button>`;
   }
 
   // ----- Metas e dados -----
@@ -514,11 +658,13 @@
     <header class="head"><a class="back" href="#hoje" aria-label="Voltar">${ICO.voltar}</a><div class="head-t"><p class="eyebrow">Ajustes</p><h1>Metas e dados</h1></div></header>
     <section class="panel"><h2 class="label">Metas por dia</h2>
       ${MACROS.map(m => `<div class="slider"><div class="slider-h"><label for="meta-${m.k}">${m.n}</label><b id="v-meta-${m.k}">${fmt(S.metas[m.k], 0)} ${m.u}</b></div>${range('meta-' + m.k, ...LIM[m.k], S.metas[m.k], 'meta', `data-k="${m.k}" data-u="${m.u}"`)}</div>`).join('')}
+      <p class="muted small" id="kcalCheck">${checkKcal()}</p>
+      <button class="btn ghost" data-act="calcMetas">Calcular pelas minhas medidas</button>
       <p class="muted small">Vitaminas e minerais usam a referência diária para homem adulto (DRI).</p></section>
     <section class="panel"><h2 class="label">Backup</h2>
-      <p class="muted small">Os dados ficam neste aparelho. Exporte para guardar uma cópia ou levar do iPhone para o computador.</p>
+      <p class="muted small">Os dados ficam neste aparelho. Exporte para guardar uma cópia ou levar do iPhone para o computador. ${S.ultimoBackup ? `Último backup: ${quando(S.ultimoBackup)}.` : 'Você ainda não fez nenhum backup.'}</p>
       <div class="row wrap"><button class="btn" data-act="exportar">Exportar</button><label class="btn ghost">Importar<input type="file" accept="application/json,.json" data-act="importar" hidden></label><button class="btn ghost" data-act="textoBackup">Copiar como texto</button></div></section>
-    ${S.custom.length ? `<section class="panel"><h2 class="label">Alimentos que você cadastrou</h2><div class="rows">${S.custom.map(f => `<div class="row-item"><span class="row-main">${foto(f)}<span class="row-t"><b>${esc(f.nome)}</b></span></span><button class="tick plain" data-act="delCustom" data-id="${f.id}" aria-label="Apagar">${ICO.lixo}</button></div>`).join('')}</div></section>` : ''}
+    ${S.custom.some(f => !f.oculto) ? `<section class="panel"><h2 class="label">Alimentos que você cadastrou</h2><div class="rows">${S.custom.filter(f => !f.oculto).map(f => `<div class="row-item"><span class="row-main">${foto(f)}<span class="row-t"><b>${esc(f.nome)}</b></span></span><button class="tick plain" data-act="delCustom" data-id="${f.id}" aria-label="Apagar">${ICO.lixo}</button></div>`).join('')}</div></section>` : ''}
     <section class="panel"><h2 class="label">Recomeçar</h2><p class="muted small">${S.exemplo ? 'A semana atual veio preenchida como exemplo. ' : ''}Apaga o calendário, os jejuns e as dietas salvas.</p><button class="btn ghost danger" data-act="resetar">Apagar tudo</button></section>
     <p class="muted small">Valores aproximados por 100 g cru (USDA FoodData Central e TACO). Ícones: Fluent Emoji, Microsoft (licença MIT).</p>`;
   }
@@ -528,19 +674,32 @@
   function sheet(html, c = {}) { ctx = c; $('#sheet-c').innerHTML = html; $('#sheet').hidden = false; document.body.classList.add('locked'); }
   function fechar() { $('#sheet').hidden = true; document.body.classList.remove('locked'); ctx = {}; }
   const topo = (titulo, sub = '', voltar = '') => `<div class="sheet-h">${voltar ? `<button class="icon-btn" data-act="${voltar}" aria-label="Voltar">${ICO.voltar}</button>` : ''}<div class="head-t"><h2>${titulo}</h2>${sub ? `<p class="muted small">${sub}</p>` : ''}</div><button class="icon-btn" data-act="fechar" aria-label="Fechar">${ICO.fechar}</button></div>`;
-  function toast(msg) { const t = $('#toast'); t.textContent = msg; t.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => t.hidden = true, 2200); }
+  // Aviso rápido. Com desfazer, mostra o botão Desfazer por alguns segundos.
+  let snapDesfazer = null;
+  function toast(msg, desfazer = false) {
+    const t = $('#toast'); if (!desfazer) snapDesfazer = null;
+    t.innerHTML = `<span>${esc(msg)}</span>${desfazer ? '<button class="undo" data-act="desfazer">Desfazer</button>' : ''}`; t.hidden = false;
+    clearTimeout(toast.t); toast.t = setTimeout(() => { t.hidden = true; snapDesfazer = null; }, desfazer ? 6000 : 2400);
+  }
+  // Roda uma mudança que pode ser desfeita: guarda o estado antes, salva, redesenha e mostra Desfazer
+  function comDesfazer(msg, fn) {
+    const snap = JSON.stringify(S);
+    const r = fn(); if (r === false) return;
+    salvar(); render(); snapDesfazer = snap; toast(typeof r === 'string' ? r : msg, true);
+  }
   function confirmar(msg, acao, rotulo = 'Confirmar') { sheet(`${topo(esc(msg))}<div class="row end"><button class="btn ghost" data-act="fechar">Cancelar</button><button class="btn" data-act="okConfirmar">${esc(rotulo)}</button></div>`, { acao }); }
 
   // Adicionar ao dia
   function sheetAdicionar(iso) {
-    const ops = [['novaRef', 'prato', 'Refeição', 'Em branco ou pronta'], ['novoLiq', 'gota', 'Líquido', 'Água, café, água com sal'], ['addSol', 'sol', 'Sol', 'Minutos de sol'], ['addTreino', 'treino', 'Treino', 'Minutos de treino'], ['planejarJejum', 'jejum', 'Jejum', 'Início e duração']];
+    const ops = [['novaRef', 'prato', 'Refeição', 'Em branco ou pronta'], ['novoLiq', 'gota', 'Líquido', 'Água, café, água com sal'], ['addSol', 'sol', 'Sol', 'Minutos de sol'], ['addTreino', 'treino', 'Treino', 'Minutos de treino'], ['planejarJejum', 'jejum', 'Jejum', 'Início e duração'], ['addPeso', 'balanca', 'Peso', 'Peso do dia']];
     sheet(`${topo('Adicionar', tituloData(iso))}<div class="grid-ops">${ops.map(([a, i, n, s]) => `<button class="op" data-act="${a}" data-iso="${iso}">${icone(i, 't-' + i)}<b>${n}</b><small>${s}</small></button>`).join('')}</div>`, { iso });
   }
   function sheetNovaRef(iso) {
     sheet(`${topo('Nova refeição', tituloData(iso), 'voltarAdd')}
       <button class="row-main solo" data-act="refBranco" data-iso="${iso}">${icone('mais')}<span class="row-t"><b>Em branco</b><small>Você escolhe os alimentos</small></span></button>
+      ${S.refsSalvas.length ? `<h3 class="label">Minhas</h3><div class="rows">${S.refsSalvas.map(r => linhaModelo(r.id, 'refModelo', iso, ICO.mais)).join('')}</div>` : ''}
       <h3 class="label">Prontas</h3>
-      <div class="rows">${Object.keys(MODELOS).map(k => { const r = ref(k), t = soma(r.itens); return `<button class="row-main solo" data-act="refModelo" data-k="${k}" data-iso="${iso}">${foto(iconeDe(r))}<span class="row-t"><b>${esc(MODELOS[k][3])}</b><small>${fmt(t.kcal, 0)} kcal · ${fmt(t.proteina_g, 0)} g prot</small></span>${ICO.mais}</button>`; }).join('')}</div>`, { iso });
+      <div class="rows">${Object.keys(MODELOS).map(k => linhaModelo(k, 'refModelo', iso, ICO.mais)).join('')}</div>`, { iso });
   }
 
   // Editar refeição
@@ -560,6 +719,7 @@
       ${rasc ? `<button class="btn ghost" data-act="addItem">${ICO.mais} Adicionar alimento</button>
       <div class="row between"><button class="btn ghost" data-act="fechar">Cancelar</button><button class="btn grow" data-act="addRasc" ${r.itens.length ? '' : 'disabled'}>Adicionar ao dia</button></div>`
       : `<button class="btn" data-act="addItem">${ICO.mais} Adicionar alimento</button>
+      ${r.itens.length ? `<div class="row wrap"><button class="btn ghost sm grow" data-act="salvarPronta">Salvar como pronta</button><button class="btn ghost sm grow" data-act="copiarRef">${ICO.copiar} Copiar para outro dia</button></div>` : ''}
       <div class="row between"><button class="btn ghost danger" data-act="delRef">Apagar refeição</button><button class="btn ghost" data-act="feitoRefSheet">${r.feito ? 'Desmarcar' : 'Marcar como comida'}</button></div>`}`, rasc ? { tipo: 'ref', iso, rasc } : { tipo: 'ref', iso, id });
   }
   function sheetLiq(iso, id) {
@@ -600,8 +760,9 @@
   function sheetJejum(id, iso) {
     const j = id ? S.jejuns.find(x => x.id === id) : null;
     let ini;
-    if (j) ini = j.inicio; else { const d = iso ? dataDe(iso) : new Date(); d.setHours(20, 0, 0, 0); ini = d.getTime(); }
-    const horas = j ? Math.round((j.fimPrev - j.inicio) / H) : 48;
+    if (j) ini = j.inicio; else { const d = iso ? dataDe(iso) : new Date(); d.setHours(20, 0, 0, 0); ini = d.getTime();
+      if (ini < Date.now()) { const n = new Date(); n.setMinutes(0, 0, 0); ini = n.getTime() + H; } }
+    const horas = j ? Math.min(144, Math.max(12, Math.round((j.fimPrev - j.inicio) / H))) : (S.ultimaDuracao || 48);
     sheet(`${topo(j ? 'Jejum' : 'Planejar jejum', '', !j && ctx.iso ? 'voltarAdd' : '')}
       <label class="field">Começa<input type="datetime-local" id="jIni" value="${localInput(ini)}" data-act="jPrev"></label>
       <div class="slider"><div class="slider-h"><label for="jH">Duração</label><b id="v-jH">${rotHoras(horas)}</b></div>${range('jH', 12, 144, 4, horas, 'jHoras')}</div>
@@ -640,7 +801,7 @@
   function sheetNutrientes(iso) {
     const t = totalDia(iso);
     sheet(`${topo('Nutrientes do dia', tituloData(iso))}${barrasMacros(t)}<p class="muted small">${t.kcal ? Math.round(t.gordura_g * 9 / t.kcal * 100) : 0}% das calorias vêm da gordura.</p>
-      <h3 class="label">Vitaminas e minerais</h3>${listaMicros(t)}<p class="muted small">Soma dos nutrientes listados na base. O que falta conta como zero.</p>`);
+      <h3 class="label">Vitaminas e minerais</h3>${listaMicros(t)}${sugestoes(t)}<p class="muted small">Soma dos nutrientes listados na base. O que falta conta como zero.</p>`);
   }
   function sheetDieta(id) {
     const dt = RECS.find(d => d.id === id) || S.dietas.find(d => d.id === id), minha = !RECS.includes(dt);
@@ -656,9 +817,11 @@
   }
   function sheetModelo(k) {
     const r = ref(k), t = soma(r.itens);
-    sheet(`${topo(esc(MODELOS[k][3]), resumoMacros(t) + ` · ${fmt(t.gordura_g, 0)} g gord`)}
-      <div class="rows">${r.itens.map(it => { const f = FOOD(it.a); return `<div class="item">${foto(f)}<span class="row-t"><b>${esc(f.nome)}</b><small>${fmt(soma([it]).kcal, 0)} kcal</small></span><span class="muted">${it.g} g</span></div>`; }).join('')}</div>
-      <div class="row wrap"><input type="date" id="addData" value="${hoje()}" aria-label="Dia"><button class="btn grow" data-act="modeloAoDia" data-k="${k}">Adicionar ao dia</button></div>`);
+    const minha = !MODELOS[k];
+    sheet(`${topo(esc(tituloModelo(k)), resumoMacros(t) + ` · ${fmt(t.gordura_g, 0)} g gord`)}
+      <div class="rows">${r.itens.map(it => { const f = FOOD(it.a); return `<div class="item">${foto(f)}<span class="row-t"><b>${esc(f?.nome || it.a)}</b><small>${fmt(soma([it]).kcal, 0)} kcal</small></span><span class="muted">${it.g} g</span></div>`; }).join('')}</div>
+      <div class="row wrap"><input type="date" id="addData" value="${hoje()}" aria-label="Dia"><button class="btn grow" data-act="modeloAoDia" data-k="${esc(k)}">Adicionar ao dia</button></div>
+      ${minha ? `<button class="btn ghost danger" data-act="delSalva" data-k="${esc(k)}">Apagar esta refeição pronta</button>` : ''}`);
   }
   function sheetSalvarSemana() {
     const seg = inicioSemana(new Date()), op = [-7, 0, 7].map(n => somaDias(seg, n));
@@ -681,6 +844,148 @@
         <div class="grid2">${MACROS.map(m => `<label class="field">${m.n} (${m.u})<input name="${m.k}" type="number" step="0.1" min="0" value="0"></label>`).join('')}</div>
         <details class="more"><summary>Vitaminas e minerais</summary><div class="grid2">${MICROS.map(m => `<label class="field">${m.n} (${m.u})<input name="${m.k}" type="number" step="0.01" min="0"></label>`).join('')}</div></details>
         <button class="btn" type="submit">Salvar alimento</button></form>`);
+  }
+
+  // ---------- Peso ----------
+  const pesoAntes = iso => [...S.pesos].reverse().find(p => p.d < iso);
+  function variacaoPeso(iso) {
+    const p = S.pesos.find(x => x.d === iso), a = pesoAntes(iso);
+    if (!p || !a) return 'Primeiro registro';
+    const dif = p.kg - a.kg, d = dataDe(a.d);
+    return `${dif > 0 ? '+' : dif < 0 ? '−' : ''}${fmt(Math.abs(dif), 1)} kg desde ${d.getDate()}/${d.getMonth() + 1}`;
+  }
+  function painelPeso() {
+    const P = S.pesos, u = P[P.length - 1];
+    if (!u) return `<button class="card-btn" data-act="addPeso">${icone('balanca')}<span class="row-t"><b>Peso</b><small>Registre para ver a evolução junto com a dieta e os jejuns</small></span>${ICO.mais}</button>`;
+    const ref30 = [...P].reverse().find(p => dataDe(u.d) - dataDe(p.d) >= 28 * DIA_MS) || P[0], dif = u.kg - ref30.kg, dias = Math.round((dataDe(u.d) - dataDe(ref30.d)) / DIA_MS);
+    return `<section class="panel">
+      <div class="row between"><h2 class="label">Peso</h2><button class="pill" data-act="addPeso">Registrar</button></div>
+      <div class="wnums"><b>${fmt(u.kg, 1)}<i> kg</i></b><small>${dias ? `${dif > 0 ? '+' : dif < 0 ? '−' : ''}${fmt(Math.abs(dif), 1)} kg em ${dias} ${dias === 1 ? 'dia' : 'dias'}` : 'Primeiro registro'}${S.perfil?.alturaCm ? ` · IMC ${fmt(u.kg / (S.perfil.alturaCm / 100) ** 2, 1)}` : ''}</small></div>
+      ${graficoPeso()}
+    </section>`;
+  }
+  // Linha do peso nos últimos 60 dias, com os jejuns em faixas vermelhas atrás
+  function graficoPeso() {
+    const fim = dataDe(hoje()).getTime() + DIA_MS, ini = fim - 60 * DIA_MS, P = S.pesos.filter(p => dataDe(p.d).getTime() >= ini);
+    if (P.length < 2) return '<p class="muted small">Registre mais um dia para ver o gráfico.</p>';
+    const t0 = Math.max(ini, dataDe(P[0].d).getTime() - DIA_MS), W = 300, Hh = 110, pad = 8;
+    const min = Math.min(...P.map(p => p.kg)) - 0.5, max = Math.max(...P.map(p => p.kg)) + 0.5;
+    const x = t => ((t - t0) / (fim - t0)) * W, y = kg => pad + (1 - (kg - min) / (max - min)) * (Hh - 2 * pad);
+    const pts = P.map(p => [x(dataDe(p.d).getTime() + DIA_MS / 2), y(p.kg)]);
+    const faixas = S.jejuns.filter(j => fimJ(j) > t0 && j.inicio < fim && j.inicio <= Date.now()).map(j => { const a = x(Math.max(t0, j.inicio)), b = x(Math.min(fim, j.fim || Math.min(Date.now(), fimJ(j)))); return `<rect x="${a.toFixed(1)}" y="0" width="${Math.max(1, b - a).toFixed(1)}" height="${Hh}" class="wfast"/>`; }).join('');
+    const d0 = new Date(t0), d1 = dataDe(hoje());
+    return `<div class="wchart"><svg viewBox="0 0 ${W} ${Hh}" preserveAspectRatio="none" aria-label="Gráfico do peso">${faixas}
+      <polyline points="${pts.map(p => p.map(v => v.toFixed(1)).join(',')).join(' ')}" class="wline"/>${pts.map(p => `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="2.5" class="wdot"/>`).join('')}</svg>
+      <div class="wleg"><span>${d0.getDate()}/${d0.getMonth() + 1}</span><span><i class="d-fast"></i>jejum</span><span>${d1.getDate()}/${d1.getMonth() + 1}</span></div></div>`;
+  }
+  function sheetPeso(iso) {
+    iso = iso || hoje();
+    const p = S.pesos.find(x => x.d === iso), base = p || [...S.pesos].reverse().find(x => x.d <= iso) || S.pesos[S.pesos.length - 1];
+    sheet(`${topo('Peso', 'De manhã, em jejum, é o jeito mais constante de comparar', ctx.iso && !p ? 'voltarAdd' : '')}
+      <div class="row wrap"><label class="field grow">Dia<input type="date" id="pData" value="${iso}" max="${hoje()}"></label>
+      <label class="field grow">Peso (kg)<input type="text" id="pKg" inputmode="decimal" autocomplete="off" value="${base ? fmt(base.kg, 1) : ''}" placeholder="80,0"></label></div>
+      <div class="row between">${p ? '<button class="btn ghost danger" data-act="delPeso">Apagar</button>' : '<span></span>'}<button class="btn" data-act="salvarPeso">Salvar</button></div>`, { tipo: 'peso', iso, ref: p ? iso : null });
+    setTimeout(() => { const i = $('#pKg'); i?.focus({ preventScroll: true }); i?.select?.(); }, 60);
+  }
+
+  // ---------- Metas pelas medidas ----------
+  const checkKcal = () => { const m = S.metas, k = m.proteina_g * 4 + m.carboidrato_g * 4 + m.gordura_g * 9, d = k - m.kcal;
+    return Math.abs(d) <= m.kcal * 0.08 ? `Proteína, gordura e carboidrato somam ${fmt(k, 0)} kcal, de acordo com a meta.` : `Proteína, gordura e carboidrato somam ${fmt(k, 0)} kcal, ${fmt(Math.abs(d), 0)} kcal ${d > 0 ? 'acima' : 'abaixo'} da meta de calorias.`; };
+  function sheetCalcMetas() {
+    const pf = S.perfil || {}, kg = S.pesos[S.pesos.length - 1]?.kg || pf.kg || '';
+    const seg = (id, ops, v) => `<div class="seg" id="${id}">${ops.map(([k, n]) => `<button class="${v === k ? 'on' : ''}" data-act="autoOp" data-v="${k}">${n}</button>`).join('')}</div>`;
+    sheet(`${topo('Calcular metas', 'Gasto pela fórmula de Mifflin-St Jeor e proteína pelo peso')}
+      <div class="grid2"><label class="field">Peso (kg)<input type="text" id="cKg" inputmode="decimal" autocomplete="off" value="${kg ? fmt(kg, 1) : ''}"></label>
+      <label class="field">Altura (cm)<input type="number" id="cAlt" inputmode="numeric" value="${pf.alturaCm || ''}"></label>
+      <label class="field">Idade<input type="number" id="cIdade" inputmode="numeric" value="${pf.idade || ''}"></label>
+      <div class="field">Sexo${seg('cSexo', [['m', 'Homem'], ['f', 'Mulher']], pf.sexo || 'm')}</div></div>
+      <div class="field">Atividade${seg('cAtiv', [['1.375', 'Leve'], ['1.55', 'Moderada'], ['1.725', 'Alta']], String(pf.ativ || '1.55'))}</div>
+      <div class="field">Objetivo${seg('cObj', [['perder', 'Perder gordura'], ['manter', 'Manter'], ['ganhar', 'Ganhar músculo']], pf.obj || 'manter')}</div>
+      <p class="muted small">Proteína de 2 g por kg (2,2 g para perder gordura), carboidrato baixo vindo de tubérculos e frutas, e o resto em gordura natural.</p>
+      <button class="btn" data-act="aplicarCalc">Usar estas metas</button>`);
+  }
+
+  // ---------- Sugestões para completar o dia ----------
+  function sugestoes(t) {
+    if (t.kcal < 300) return '';
+    const baixos = MICROS.filter(m => m.k !== 'sodio_mg' && t[m.k] / m.ref < 0.5).sort((a, b) => t[a.k] / a.ref - t[b.k] / b.ref).slice(0, 3);
+    if (!baixos.length) return '';
+    const fontes = m => DB.alimentos.filter(f => !['bebidas', 'extras'].includes(f.categoria) && f.id !== 'agua-sal' && valor(f, m.k) > 0)
+      .map(f => ({ f, v: valor(f, m.k) / m.ref * (f.un >= 100 ? f.un : 100) / 100 + (ehFav(f.id) ? 0.15 : 0) })).sort((a, b) => b.v - a.v).slice(0, 3).map(x => x.f);
+    return `<h3 class="label">Para completar</h3><div class="rows">${baixos.map(m => `<div class="sug"><span class="row-t"><b>${esc(m.n)}</b><small>${pct(t[m.k], m.ref)}% da referência</small></span><span class="sug-f">${fontes(m).map(f => `<button class="chip" data-act="verAlimento" data-a="${esc(f.id)}">${esc(f.nome)}</button>`).join('')}</span></div>`).join('')}</div>`;
+  }
+
+  // ---------- Lista de compras ----------
+  const UNID_COMPRA = { ovo: 'ovos', gema: 'gemas', 'ovo-codorna': 'ovos de codorna', 'ovo-pata': 'ovos de pata', laranja: 'laranjas', kiwi: 'kiwis', banana: 'bananas', maca: 'maçãs', limao: 'limões', tomate: 'tomates', cebola: 'cebolas' };
+  function itensCompra(dias) {
+    const tot = {};
+    const add = (a, g, prof = 0) => { const f = FOOD(a); if (!f || g <= 0 || prof > 3) return;
+      if (f.receita) { const peso = f.receita.reduce((x, it) => x + it.g, 0) || 1; f.receita.forEach(it => add(it.a, it.g * g / peso, prof + 1)); return; }
+      if (f.id === 'agua') return; tot[a] = (tot[a] || 0) + g; };
+    dias.forEach(iso => { const d = diaDe(iso);
+      d.refeicoes.filter(r => !r.feito).forEach(r => r.itens.forEach(it => add(it.a, it.g)));
+      (d.liquidos || []).filter(l => !l.feito).forEach(l => add(l.a, l.g)); });
+    return tot;
+  }
+  const qtdCompra = (f, g) => {
+    if (f.un && f.un <= 150 && !f.passo && UNID_COMPRA[f.id]) { const n = Math.ceil(g / f.un - 0.05); return `${n} ${n === 1 ? f.nome.toLowerCase() : UNID_COMPRA[f.id]}`; }
+    if (g >= 1000) return `${fmt(Math.ceil(g / 100) / 10, 1)} ${f.categoria === 'bebidas' ? 'L' : 'kg'}`;
+    return `${fmt(g < 50 ? Math.ceil(g) : Math.ceil(g / 10) * 10, 0)} ${f.categoria === 'bebidas' ? 'ml' : 'g'}`;
+  };
+  function sheetCompras(op = {}) {
+    const seg0 = inicioSemana(new Date());
+    const ops = [['hoje7', 'Próximos 7 dias'], ['esta', 'Esta semana'], ['prox', 'Próxima semana']];
+    const per = op.per || ctx.per || 'hoje7', sem = op.sem || ctx.sem;
+    const ini = sem ? dataDe(sem) : per === 'hoje7' ? dataDe(hoje()) : per === 'esta' ? seg0 : somaDias(seg0, 7);
+    const dias = Array.from({ length: 7 }, (_, k) => isoDe(somaDias(ini, k))), chave = dias[0], marcados = new Set(S.compras[chave] || []);
+    const tot = itensCompra(dias), cats = [...DB.categorias.map(c => c.id), 'receitas'];
+    const grupos = cats.map(c => [c, Object.keys(tot).filter(a => FOOD(a).categoria === c).sort((a, b) => FOOD(a).nome.localeCompare(FOOD(b).nome))]).filter(([, L]) => L.length);
+    const fimD = dataDe(dias[6]);
+    sheet(`${topo('Lista de compras', `${ini.getDate()}/${ini.getMonth() + 1} – ${fimD.getDate()}/${fimD.getMonth() + 1} · só o que ainda não foi comido`)}
+      ${sem ? '' : `<div class="seg">${ops.map(([k, n]) => `<button class="${per === k ? 'on' : ''}" data-act="comprasPer" data-v="${k}">${n}</button>`).join('')}</div>`}
+      ${grupos.length ? grupos.map(([c, L]) => `<section class="group"><h3 class="label">${esc((CATS[c] || c).split(',')[0])}</h3><div class="rows shop">${L.map(a => { const f = FOOD(a), on = marcados.has(a);
+        return `<button class="row-main solo ${on ? 'done' : ''}" data-act="comprado" data-a="${esc(a)}" aria-pressed="${on}">${foto(f)}<span class="row-t"><b>${esc(f.nome)}</b><small>${qtdCompra(f, tot[a])}</small></span><span class="tick" aria-hidden="true">${ICO.check}</span></button>`; }).join('')}</div></section>`).join('')
+        : '<p class="empty">Nada planejado nesses dias. Aplique uma dieta ou adicione refeições no calendário.</p>'}
+      ${grupos.length ? `<div class="row between"><span class="muted small">${marcados.size} de ${Object.keys(tot).length} no carrinho</span><button class="btn ghost" data-act="copiarCompras">${ICO.copiar} Copiar lista</button></div>` : ''}`, { tipo: 'compras', per, sem, chave, dias });
+  }
+
+  // ---------- Histórico e fases do jejum ----------
+  function sheetHistorico() {
+    const F = S.jejuns.filter(j => j.fim).sort((a, b) => b.inicio - a.inicio), hs = F.map(j => (j.fim - j.inicio) / H);
+    const tot = hs.reduce((a, b) => a + b, 0), metas = F.filter(j => j.fim >= j.fimPrev - 30 * 60e3).length;
+    sheet(`${topo('Histórico de jejuns')}
+      ${F.length ? `<div class="big-nums"><div><small>Jejuns</small><b>${F.length}</b><small>${metas} na meta</small></div><div><small>Mais longo</small><b>${duracao(Math.max(...hs))}</b><small>média ${duracao(tot / F.length)}</small></div></div>
+      <div class="rows">${F.map((j, k) => { const h = hs[k], p = Math.min(100, Math.round(h / ((j.fimPrev - j.inicio) / H) * 100));
+        return `<button class="row-main solo" data-act="editarJejum" data-id="${j.id}">${icone('jejum', 't-fast')}<span class="row-t"><b>${duracao(h)} <span class="muted">de ${fmt((j.fimPrev - j.inicio) / H, 0)} h</span></b><small>${quando(j.inicio)} até ${quando(j.fim)} · ${faseDe(h).f[1].toLowerCase()}</small><span class="bar"><i style="width:${p}%"></i></span></span></button>`; }).join('')}</div>`
+      : '<p class="empty">Quando você encerrar um jejum, ele aparece aqui com a duração e a fase alcançada.</p>'}`);
+  }
+  function sheetFases(h) {
+    const k = faseDe(h).k;
+    sheet(`${topo('Fases do jejum', 'Valores aproximados, mudam de pessoa para pessoa')}
+      <div class="rows">${FASES.map(([ini, n, d], i) => `<div class="row-item ${i < k ? 'done' : ''} ${i === k ? 'cur' : ''}"><span class="row-main"><span class="phase-k">${ini} h</span><span class="row-t"><b>${n}${i === k ? ' <span class="badge">agora</span>' : ''}</b><small>${d}</small></span></span></div>`).join('')}</div>`);
+  }
+
+  // ---------- Copiar dia e refeição ----------
+  function sheetCopiar(tipo) {
+    const amanha = isoDe(somaDias(dataDe(ctx.iso), 1));
+    sheet(`${topo(tipo === 'dia' ? 'Copiar o dia' : 'Copiar refeição', tituloData(ctx.iso))}
+      <label class="field">Para o dia<input type="date" id="cpData" value="${amanha}"></label>
+      ${tipo === 'dia' ? `<label class="toggle"><input type="checkbox" id="cpSubst"><span></span>Substituir o que já está no dia</label><p class="muted small">Copia refeições, líquidos e rotina, tudo desmarcado. Jejuns não são copiados.</p>` : ''}
+      <button class="btn" data-act="${tipo === 'dia' ? 'okCopiarDia' : 'okCopiarRef'}">Copiar</button>`, { ...ctx, tipo: 'copiar' });
+  }
+
+  // Comer durante o jejum: pergunta se encerra
+  function perguntarComer(iso, id, depois) {
+    const j = jejumAtivo();
+    sheet(`${topo('Você está em jejum', `Há ${duracao((Date.now() - j.inicio) / H)}. Marcar esta refeição como comida encerra o jejum agora?`)}
+      <div class="row end"><button class="btn ghost" data-act="soMarcar">Só marcar</button><button class="btn" data-act="comerEncerrar">Encerrar jejum e marcar</button></div>`, { iso, id, jid: j.id, depois });
+  }
+  // Encerra o jejum: a quebra planejada vem para agora (ou sai, se outra refeição quebrou o jejum)
+  function encerrar(j, quebrouCom) {
+    j.fim = Date.now();
+    if (quebrouCom) refsDoJejum(j).forEach(({ iso, r }) => { if (!r.feito && r.nome === 'Quebra do jejum' && r !== quebrouCom) S.dias[iso].refeicoes = S.dias[iso].refeicoes.filter(x => x !== r); });
+    sincronizarJejum(j);
+    return `Jejum de ${duracao((j.fim - j.inicio) / H)} registrado`;
   }
 
   // ---------- Dieta automática com os favoritos ----------
@@ -852,7 +1157,7 @@
     fab: () => sheetAdicionar(rota === 'dia' ? diaRota : hoje()),
     voltarAdd: () => sheetAdicionar(ctx.iso),
     nutrientes: el => sheetNutrientes(el.dataset.iso),
-    feitoRef: el => { const r = acharRef(el.dataset.iso, el.dataset.id); r.feito = !r.feito; salvar(); render(); },
+    feitoRef: el => marcarRef(el.dataset.iso, el.dataset.id, () => render()),
     feitoRot: el => { const r = diaEdit(el.dataset.iso).rotina.find(x => x.id === el.dataset.id); r.feito = !r.feito; salvar(); render(); },
     abrirRef: el => sheetRef(el.dataset.iso, el.dataset.id),
     abrirRot: el => sheetRot(el.dataset.iso, el.dataset.id),
@@ -861,11 +1166,11 @@
     feitoLiq: el => { const l = liqsDe(el.dataset.iso).find(x => x.id === el.dataset.id); l.feito = !l.feito; salvar(); render(); },
     abrirLiq: el => sheetLiq(el.dataset.iso, el.dataset.id),
     salvarLiq: () => { const l = liqsDe(ctx.iso).find(x => x.id === ctx.id); l.g = +$('#lG').value; l.hora = $('#lHora').value; salvar(); fechar(); render(); },
-    delLiq: () => { const d = diaEdit(ctx.iso); d.liquidos = d.liquidos.filter(x => x.id !== ctx.id); salvar(); fechar(); render(); },
+    delLiq: () => { const { iso, id } = ctx; fechar(); comDesfazer('Líquido apagado', () => { const d = diaEdit(iso); d.liquidos = d.liquidos.filter(x => x.id !== id); }); },
     refBranco: el => sheetRef(el.dataset.iso, null, { id: uid(), nome: 'Refeição', hora: '', feito: false, itens: [] }),
     refModelo: el => sheetRef(el.dataset.iso, null, ref(el.dataset.k)),
     addRasc: () => { const r = ctx.rasc, iso = ctx.iso; if (!r.itens.length) return; diaEdit(iso).refeicoes.push(r); S.exemplo = false; salvar(); fechar(); render(); toast(`${r.nome} adicionada em ${tituloData(iso)}`); },
-    addItem: () => { filtro.qP = ''; filtro.catP = S.favs.length ? 'fav' : ''; sheetPicker(); },
+    addItem: () => { filtro.qP = ''; filtro.catP = S.favs.length ? 'fav' : recentes().length ? 'rec' : ''; sheetPicker(); },
     voltarRef: () => ctx.receita ? sheetReceita() : sheetRef(ctx.iso, ctx.id, ctx.rasc),
     voltarPicker: () => sheetPicker(),
     escolher: el => sheetGramas(el.dataset.a),
@@ -875,8 +1180,22 @@
     menos: el => { const it = itensCtx()[+el.dataset.k]; it.g = Math.max(0, it.g - passo(FOOD(it.a))); reRef(); },
     maisG: el => { const it = itensCtx()[+el.dataset.k]; it.g += passo(FOOD(it.a)); reRef(); },
     delItem: el => { itensCtx().splice(+el.dataset.k, 1); reRef(); },
-    delRef: () => { const d = diaEdit(ctx.iso); d.refeicoes = d.refeicoes.filter(r => r.id !== ctx.id); salvar(); fechar(); render(); },
-    feitoRefSheet: () => { const r = acharRef(ctx.iso, ctx.id); r.feito = !r.feito; reRef(); },
+    delRef: () => { const { iso, id } = ctx; fechar(); comDesfazer('Refeição apagada', () => { const d = diaEdit(iso); d.refeicoes = d.refeicoes.filter(r => r.id !== id); }); },
+    salvarPronta: () => { const r = acharRef(ctx.iso, ctx.id); if (!r) return; const ja = S.refsSalvas.find(x => x.nome === r.nome && JSON.stringify(x.itens) === JSON.stringify(r.itens));
+      if (ja) return toast('Essa refeição já está salva'); S.refsSalvas.push({ id: 'salva-' + uid(), nome: r.nome, hora: r.hora || '', itens: clone(r.itens) }); salvar(); toast(`“${r.nome}” salva em Minhas refeições`); },
+    copiarRef: () => sheetCopiar('ref'),
+    copiarDia: el => { ctx.iso = el.dataset.iso; sheetCopiar('dia'); },
+    okCopiarRef: () => { const r = acharRef(ctx.iso, ctx.id), para = $('#cpData').value; if (!r || !para) return;
+      diaEdit(para).refeicoes.push({ ...clone(r), id: uid(), feito: false, jejum: undefined }); salvar(); fechar(); render(); toast(`Copiada para ${tituloData(para)}`); },
+    okCopiarDia: () => { const de = ctx.iso, para = $('#cpData').value, subst = $('#cpSubst').checked; if (!para || para === de) return toast('Escolha outro dia');
+      fechar(); comDesfazer(`Dia copiado para ${tituloData(para)}`, () => { const o = diaDe(de), d = subst ? (S.dias[para] = { refeicoes: [], rotina: [], liquidos: [] }) : diaEdit(para);
+        d.refeicoes.push(...o.refeicoes.map(r => { const c = { ...clone(r), id: uid(), feito: false }; delete c.jejum; return c; }));
+        d.liquidos.push(...(o.liquidos || []).filter(l => !l.auto).map(l => ({ ...l, id: uid(), feito: false })));
+        d.rotina.push(...o.rotina.map(r => ({ ...r, id: uid(), feito: false }))); garantirTodos(); }); },
+    feitoRefSheet: () => { const { iso, id } = ctx; marcarRef(iso, id, () => { render(); sheetRef(iso, id); }); },
+    soMarcar: () => { const { iso, id, depois } = ctx; const r = acharRef(iso, id); fechar(); if (r) { r.feito = true; salvar(); } depois(); },
+    comerEncerrar: () => { const { iso, id, jid } = ctx; fechar(); comDesfazer('', () => { const r = acharRef(iso, id), j = S.jejuns.find(x => x.id === jid); if (r) r.feito = true; return j ? encerrar(j, r) : ''; }); },
+    desfazer: () => { if (!snapDesfazer) return; const o = normalizar(JSON.parse(snapDesfazer)); snapDesfazer = null; if (!o) return; S = o; salvar(); fechar(); render(); toast('Desfeito'); },
     addSol: el => sheetRot(el.dataset.iso, null, 'sol'),
     addTreino: el => sheetRot(el.dataset.iso, null, 'treino'),
     rotTipo: el => { ctx.rot.tipo = el.dataset.t; $$('[data-act=rotTipo]').forEach(b => b.classList.toggle('on', b === el)); },
@@ -885,28 +1204,76 @@
       const d = diaEdit(ctx.iso); if (ctx.novo) d.rotina.push(r); else d.rotina[d.rotina.findIndex(x => x.id === r.id)] = r;
       salvar(); fechar(); render();
     },
-    delRot: () => { const d = diaEdit(ctx.iso); d.rotina = d.rotina.filter(x => x.id !== ctx.id); salvar(); fechar(); render(); },
-    comecarJejum: () => { const j = { id: uid(), inicio: Date.now(), fimPrev: Date.now() + 48 * H, fim: null }; S.jejuns.push(j); garantirAguaSal(j); salvar(); render(); toast('Jejum começou. Meta de 48 h, ajuste em Editar.'); },
+    delRot: () => { const { iso, id } = ctx; fechar(); comDesfazer('Apagado da rotina', () => { const d = diaEdit(iso); d.rotina = d.rotina.filter(x => x.id !== id); }); },
+    addPeso: el => sheetPeso(el.dataset.iso || (rota === 'dia' ? diaRota : hoje())),
+    salvarPeso: () => { const d = $('#pData').value, kg = parseFloat(String($('#pKg').value).replace(',', '.'));
+      if (!d || !(kg >= 20 && kg <= 400)) return toast('Digite um peso entre 20 e 400 kg'); if (d > hoje()) return toast('Escolha hoje ou um dia passado');
+      if (ctx.ref && ctx.ref !== d) S.pesos = S.pesos.filter(p => p.d !== ctx.ref);
+      S.pesos = S.pesos.filter(p => p.d !== d); S.pesos.push({ d, kg: Math.round(kg * 10) / 10 }); S.pesos.sort((a, b) => a.d.localeCompare(b.d));
+      salvar(); fechar(); render(); toast(`${fmt(kg, 1)} kg em ${tituloData(d).toLowerCase()}`); },
+    delPeso: () => { const d = ctx.ref; fechar(); comDesfazer('Peso apagado', () => { S.pesos = S.pesos.filter(p => p.d !== d); }); },
+    calcMetas: () => sheetCalcMetas(),
+    aplicarCalc: () => { const n = id => parseFloat(String($(id).value).replace(',', '.')), kg = n('#cKg'), alt = n('#cAlt'), idade = n('#cIdade');
+      if (!(kg > 30 && alt > 120 && idade > 12)) return toast('Preencha peso, altura e idade');
+      const sexo = $('#cSexo .on').dataset.v, ativ = +$('#cAtiv .on').dataset.v, obj = $('#cObj .on').dataset.v;
+      const tmb = 10 * kg + 6.25 * alt - 5 * idade + (sexo === 'm' ? 5 : -161), kcal = Math.round(tmb * ativ * { perder: 0.8, manter: 1, ganhar: 1.1 }[obj] / 50) * 50;
+      const prot = Math.round(kg * (obj === 'perder' ? 2.2 : 2) / 5) * 5, carb = { perder: 75, manter: 110, ganhar: 160 }[obj], gord = Math.max(30, Math.round((kcal - prot * 4 - carb * 4) / 9 / 5) * 5);
+      S.perfil = { kg, alturaCm: alt, idade, sexo, ativ, obj }; if (!S.pesos.length) S.pesos.push({ d: hoje(), kg });
+      comDesfazer(`Metas: ${fmt(kcal, 0)} kcal e ${prot} g de proteína`, () => { Object.assign(S.metas, { kcal, proteina_g: prot, carboidrato_g: carb, gordura_g: gord, fibra_g: Math.max(S.metas.fibra_g, 30) }); fechar(); }); },
+    fases: el => sheetFases(+el.dataset.h),
+    historicoJejum: () => sheetHistorico(),
+    compras: el => sheetCompras({ sem: el.dataset.sem }),
+    comprasPer: el => sheetCompras({ per: el.dataset.v }),
+    comprado: el => { const k = ctx.chave, a = el.dataset.a, L = new Set(S.compras[k] || []); L.has(a) ? L.delete(a) : L.add(a); S.compras[k] = [...L];
+      // guarda só as listas das últimas semanas
+      Object.keys(S.compras).filter(x => x < isoDe(somaDias(new Date(), -21))).forEach(x => delete S.compras[x]); salvar(); sheetCompras({ per: ctx.per, sem: ctx.sem }); },
+    copiarCompras: () => { const tot = itensCompra(ctx.dias), marc = new Set(S.compras[ctx.chave] || []);
+      const txt = Object.keys(tot).filter(a => !marc.has(a)).sort((a, b) => FOOD(a).categoria.localeCompare(FOOD(b).categoria) || FOOD(a).nome.localeCompare(FOOD(b).nome)).map(a => `- ${FOOD(a).nome}: ${qtdCompra(FOOD(a), tot[a])}`).join('\n');
+      navigator.clipboard?.writeText(`Lista de compras\n${txt}`).then(() => toast('Lista copiada. Cole nas Notas ou no WhatsApp.'), () => toast('Não foi possível copiar')); },
+    comecarJejum: () => {
+      const h = S.ultimaDuracao || 48, prox = proxJejum();
+      if (prox && prox.inicio < Date.now() + h * H) return CLICK.comecarAgora({ dataset: { id: prox.id } });
+      comDesfazer('', () => { const j = { id: uid(), inicio: Date.now(), fimPrev: Date.now() + h * H, fim: null }; S.jejuns.push(j); garantirAguaSal(j);
+        const c = refsNoJejum(j); tirarRefs(c);
+        return `Jejum começou, meta de ${h} h${c.length ? `. ${c.length} ${c.length === 1 ? 'refeição dentro do jejum saiu' : 'refeições dentro do jejum saíram'}` : ''}`; }); },
+    comecarAgora: el => { const id = el.dataset.id; comDesfazer('', () => { const j = S.jejuns.find(x => x.id === id); if (!j) return false; const d = j.fimPrev - j.inicio;
+      j.inicio = Date.now(); j.fimPrev = j.inicio + d; sincronizarJejum(j); const c = refsNoJejum(j); tirarRefs(c);
+      return `Jejum começou agora, meta de ${fmt(d / H, 0)} h${c.length ? `. ${c.length} ${c.length === 1 ? 'refeição saiu' : 'refeições saíram'} do caminho` : ''}`; }); },
     planejarJejum: el => { ctx.iso = el.dataset.iso || ctx.iso; sheetJejum(null, el.dataset.iso); },
     editarJejum: el => sheetJejum(el.dataset.id),
     salvarJejum: () => {
-      const ini = new Date($('#jIni').value).getTime(), h = +$('#jH').value; if (isNaN(ini)) return toast('Escolha o dia e a hora do começo.');
-      if (ctx.id) { const j = S.jejuns.find(x => x.id === ctx.id); j.inicio = ini; j.fimPrev = ini + h * H; if (j.fim && j.fim < ini) j.fim = null; garantirAguaSal(j); }
-      else {
-        const jn = { id: uid(), inicio: ini, fimPrev: ini + h * H, fim: null }; S.jejuns.push(jn); garantirAguaSal(jn);
-        if ($('#jPre')?.checked) { const d0 = new Date(ini - H), iso = isoDe(d0); diaEdit(iso).refeicoes.push(ref(h >= 72 ? 'pre_jejum_forte' : 'pre_jejum', d0.toTimeString().slice(0, 5))); }
-        if ($('#jQuebra')?.checked) { const d1 = new Date(ini + h * H), iso = isoDe(d1); diaEdit(iso).refeicoes.push(ref('quebra', d1.toTimeString().slice(0, 5))); }
-      }
-      salvar(); fechar(); render(); toast(ctx.id ? 'Jejum atualizado' : `Jejum de ${h} h planejado`);
+      const ini = new Date($('#jIni').value).getTime(), h = +$('#jH').value, id = ctx.id; if (isNaN(ini)) return toast('Escolha o dia e a hora do começo.');
+      const jOld = id && S.jejuns.find(x => x.id === id);
+      if (jOld?.fim && jOld.fim <= ini) return toast('O começo precisa ser antes do fim do jejum.');
+      const fimNovo = jOld?.fim || ini + h * H, outro = sobrepoe(ini, fimNovo, id);
+      if (outro) return toast(`Já tem um jejum de ${quando(outro.inicio)} até ${quando(fimJ(outro))}.`);
+      const pre = $('#jPre')?.checked, qb = $('#jQuebra')?.checked;
+      S.ultimaDuracao = h; fechar();
+      comDesfazer('', () => {
+        let j;
+        if (jOld) { j = jOld; j.inicio = ini; j.fimPrev = ini + h * H; }
+        else {
+          j = { id: uid(), inicio: ini, fimPrev: ini + h * H, fim: null }; S.jejuns.push(j);
+          if (pre) diaEdit(isoDe(new Date(ini - H))).refeicoes.push({ ...ref(h >= 72 ? 'pre_jejum_forte' : 'pre_jejum', hhmm(ini - H)), jejum: j.id });
+          if (qb) diaEdit(isoDe(new Date(j.fimPrev))).refeicoes.push({ ...ref('quebra', hhmm(j.fimPrev)), jejum: j.id });
+        }
+        sincronizarJejum(j);
+        const c = refsNoJejum(j); tirarRefs(c);
+        return `${jOld ? 'Jejum atualizado' : `Jejum de ${h} h planejado`}${c.length ? `. ${c.length} ${c.length === 1 ? 'refeição que caía no jejum saiu' : 'refeições que caíam no jejum saíram'}` : ''}`;
+      });
     },
-    encerrarJejum: el => { const id = el.dataset.id; confirmar('Encerrar o jejum agora?', () => { const j = S.jejuns.find(x => x.id === id); j.fim = Date.now(); salvar(); render(); toast(`Jejum de ${duracao((j.fim - j.inicio) / H)} registrado`); }, 'Encerrar'); },
-    delJejum: () => { const id = ctx.id; confirmar('Apagar este jejum?', () => { S.jejuns = S.jejuns.filter(j => j.id !== id); salvar(); render(); }, 'Apagar'); },
+    encerrarJejum: el => { const id = el.dataset.id, j = S.jejuns.find(x => x.id === id); if (!j) return;
+      const h = (Date.now() - j.inicio) / H, falta = (j.fimPrev - Date.now()) / H;
+      confirmar(falta > 0 ? `Encerrar agora, com ${duracao(h)}? Faltam ${duracao(falta)} para a meta.` : `Encerrar o jejum com ${duracao(h)}?`, () => comDesfazer('', () => encerrar(S.jejuns.find(x => x.id === id))), 'Encerrar'); },
+    delJejum: () => { const id = ctx.id; confirmar('Apagar este jejum? O pré-jejum e a quebra ainda não comidos saem junto.', () => comDesfazer('Jejum apagado', () => {
+      const j = S.jejuns.find(x => x.id === id); if (!j) return false;
+      refsDoJejum(j).forEach(({ iso, r }) => { if (!r.feito) S.dias[iso].refeicoes = S.dias[iso].refeicoes.filter(x => x !== r); else delete r.jejum; });
+      S.jejuns = S.jejuns.filter(x => x.id !== id); limparAguaSal(); }), 'Apagar'); },
     calSel: () => { calSel = calSel ? null : new Set(); render(); },
     selDia: el => { const iso = el.dataset.iso; calSel.has(iso) ? calSel.delete(iso) : calSel.add(iso); render(); },
     apagarDias: () => { const sel = new Set(calSel), n = sel.size;
-      confirmar(`Apagar tudo o que está em ${n} ${n === 1 ? 'dia' : 'dias'}?`, () => {
-        sel.forEach(iso => delete S.dias[iso]); S.jejuns = S.jejuns.filter(j => !sel.has(isoDe(new Date(j.inicio))));
-        S.exemplo = false; calSel = null; salvar(); render(); toast(`${n} ${n === 1 ? 'dia limpo' : 'dias limpos'}`); }, 'Apagar'); },
+      confirmar(`Apagar tudo o que está em ${n} ${n === 1 ? 'dia' : 'dias'}?`, () => { calSel = null; comDesfazer(`${n} ${n === 1 ? 'dia limpo' : 'dias limpos'}`, () => {
+        sel.forEach(iso => delete S.dias[iso]); S.jejuns = S.jejuns.filter(j => !sel.has(isoDe(new Date(j.inicio)))); limparAguaSal(); S.exemplo = false; }); }, 'Apagar'); },
     mes: el => { mesCal = new Date(mesCal.getFullYear(), mesCal.getMonth() + +el.dataset.d, 1); render(); },
     sem: el => { semRes = somaDias(semRes, +el.dataset.d); render(); },
     soFeito: el => { soFeito = el.dataset.v === '1'; render(); },
@@ -942,7 +1309,7 @@
       if (!ehFav(f.id)) S.favs.push(f.id);
       salvar(); fechar(); filtro.cat = 'receitas'; render(); toast(`“${f.nome}” salvo em Minhas combinações`);
     },
-    delReceita: () => { const id = ctx.receita.id; confirmar('Apagar esta combinação?', () => { S.custom = S.custom.filter(f => f.id !== id); S.favs = S.favs.filter(x => x !== id); salvar(); render(); }, 'Apagar'); },
+    delReceita: () => { const id = ctx.receita.id; fechar(); comDesfazer('Combinação apagada', () => apagarAlimento(id)); },
     fav: el => { const a = el.dataset.a; S.favs = ehFav(a) ? S.favs.filter(x => x !== a) : [...S.favs, a]; salvar(); const on = ehFav(a);
       $$(`[data-act=fav][data-a="${a}"]`).forEach(b => { b.classList.toggle('on', on); b.setAttribute('aria-pressed', on); });
       if (filtro.cat === 'fav' && !on && $('#lista')) $('#lista').innerHTML = listaAlimentos();
@@ -967,16 +1334,47 @@
       S.dietas.push({ id: 'minha-' + uid(), nome: $('#nomeDieta').value.trim() || 'Minha semana', desc: `Salva da semana de ${seg.getDate()}/${seg.getMonth() + 1}.`, dias, jejum });
       salvar(); fechar(); render(); toast('Semana salva em Minhas dietas');
     },
-    exportar: () => { const blob = new Blob([JSON.stringify(S)], { type: 'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `minha-dieta-${hoje()}.json`; document.body.appendChild(a); a.click(); a.remove(); toast('Backup exportado'); },
+    delSalva: el => { const k = el.dataset.k; fechar(); comDesfazer('Refeição pronta apagada', () => { S.refsSalvas = S.refsSalvas.filter(r => r.id !== k); }); },
+    exportar: async () => {
+      const nome = `minha-dieta-${hoje()}.json`, blob = new Blob([JSON.stringify(S)], { type: 'application/json' });
+      const ok = () => { S.ultimoBackup = Date.now(); salvar(); render(); toast('Backup exportado'); };
+      // No iPhone o compartilhamento deixa salvar em Arquivos ou mandar por mensagem
+      try { const file = new File([blob], nome, { type: 'application/json' });
+        if (navigator.canShare?.({ files: [file] }) && /iPhone|iPad|Android/i.test(navigator.userAgent)) { await navigator.share({ files: [file], title: 'Backup Minha Dieta' }); return ok(); } }
+      catch (e) { if (e?.name === 'AbortError') return; }
+      const a = document.createElement('a'), url = URL.createObjectURL(blob); a.href = url; a.download = nome; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 5000); ok(); },
     textoBackup: () => sheet(`${topo('Backup em texto', 'Copie e guarde, ou cole um backup e importe')}<textarea id="bkTxt" rows="6" aria-label="Backup">${esc(JSON.stringify(S))}</textarea><div class="row end"><button class="btn ghost" data-act="copiarBk">Copiar</button><button class="btn" data-act="colarBk">Importar este texto</button></div>`),
-    copiarBk: () => { const t = $('#bkTxt'); navigator.clipboard?.writeText(t.value).then(() => toast('Copiado'), () => { t.select(); toast('Selecione e copie'); }); },
+    copiarBk: () => { const t = $('#bkTxt'); navigator.clipboard?.writeText(t.value).then(() => { S.ultimoBackup = Date.now(); salvar(); toast('Copiado'); }, () => { t.select(); toast('Selecione e copie'); }); },
     colarBk: () => importar($('#bkTxt').value),
-    delCustom: el => { S.custom = S.custom.filter(f => f.id !== el.dataset.id); salvar(); render(); },
-    resetar: () => confirmar('Apagar todos os dados deste aparelho?', () => { S = { v: 2, metas: S.metas, dias: {}, jejuns: [], dietas: [], custom: [], favs: S.favs || [], exemplo: false }; salvar(); render(); toast('Dados apagados'); }, 'Apagar tudo'),
+    delCustom: el => { const id = el.dataset.id; comDesfazer(`${FOOD(id)?.nome || 'Alimento'} apagado`, () => apagarAlimento(id)); },
+    resetar: () => confirmar('Apagar todos os dados deste aparelho?', () => comDesfazer('Dados apagados', () => {
+      const custom = S.custom.filter(f => f.receita); S = normalizar({ v: 2, metas: S.metas, dias: {}, jejuns: [], dietas: [], custom, favs: S.favs.filter(id => DBMAP.has(id) || custom.some(f => f.id === id)), perfil: S.perfil, exemplo: false, migLiq: true, migJejum: true }); }), 'Apagar tudo'),
   };
+  // Importar troca todos os dados pelo backup (pode desfazer logo depois)
   function importar(txt) {
-    try { const o = JSON.parse(txt); if (o.v !== 2 || typeof o.dias !== 'object') throw 0; S = o; salvar(); fechar(); render(); toast('Backup importado'); }
-    catch (e) { toast('Arquivo inválido. Use um backup exportado por este app.'); }
+    let o; try { o = normalizar(JSON.parse(txt)); } catch (e) { o = null; }
+    if (!o) return toast('Arquivo inválido. Use um backup exportado por este app.');
+    const n = Object.keys(o.dias).length;
+    confirmar(`Trocar os dados deste aparelho pelo backup (${n} ${n === 1 ? 'dia' : 'dias'} no calendário)?`, () => comDesfazer('Backup importado', () => { S = o; S.ultimoBackup = Date.now(); }), 'Importar');
+  }
+  // Apaga um alimento seu. Se ele está em alguma refeição, fica oculto para não mudar as contas.
+  function apagarAlimento(id) {
+    const usado = Object.values(S.dias).some(d => d.refeicoes.some(r => r.itens.some(it => it.a === id)) || d.liquidos.some(l => l.a === id))
+      || S.dietas.some(dt => dt.dias.some(d => d.refeicoes.some(r => r.itens.some(it => it.a === id)))) || S.refsSalvas.some(r => r.itens.some(it => it.a === id))
+      || S.custom.some(f => f.id !== id && f.receita?.some(it => it.a === id));
+    if (usado) { const f = S.custom.find(x => x.id === id); if (f) f.oculto = true; } else S.custom = S.custom.filter(f => f.id !== id);
+    S.favs = S.favs.filter(x => x !== id);
+  }
+  const garantirTodos = () => { S.jejuns.filter(j => !j.fim).forEach(j => garantirAguaSal(j)); limparAguaSal(); };
+  // Marcar refeição como comida. Se estiver em jejum hoje, encerra o jejum (a quebra encerra direto, outra refeição pergunta).
+  function marcarRef(iso, id, depois) {
+    const r = acharRef(iso, id); if (!r) return;
+    const j = jejumAtivo();
+    if (!r.feito && j && iso === hoje() && r.nome !== 'Pré-jejum' && (!r.hora || tsRef(iso, r.hora) >= j.inicio)) {
+      if (r.jejum === j.id || r.nome === 'Quebra do jejum') { fechar(); return comDesfazer('', () => { r.feito = true; return encerrar(j, r); }); }
+      return perguntarComer(iso, id, depois);
+    }
+    r.feito = !r.feito; S.exemplo = false; salvar(); depois();
   }
   const setRange = el => el.style.setProperty('--p', ((el.value - el.min) / (el.max - el.min) * 100).toFixed(1) + '%');
   const INPUT = {
@@ -988,7 +1386,7 @@
     rotMin: el => { $('#v-rMin').textContent = el.value + ' min'; },
     jHoras: el => { $('#v-jH').textContent = rotHoras(+el.value); jPrev(); },
     jPrev: () => jPrev(),
-    meta: el => { $('#v-meta-' + el.dataset.k).textContent = `${fmt(+el.value, 0)} ${el.dataset.u}`; S.metas[el.dataset.k] = +el.value; salvar(); },
+    meta: el => { $('#v-meta-' + el.dataset.k).textContent = `${fmt(+el.value, 0)} ${el.dataset.u}`; S.metas[el.dataset.k] = +el.value; salvar(); $('#kcalCheck') && ($('#kcalCheck').textContent = checkKcal()); },
   };
   const CHANGE = {
     diaAplicar: el => { $$('.dname[data-k0]').forEach(s => { s.textContent = DIAS_C[(+el.value + +s.dataset.k0) % 7]; }); },
